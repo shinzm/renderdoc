@@ -27,6 +27,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QLabel>
@@ -1000,6 +1001,12 @@ void CaptureContext::LoadCapture(const rdcstr &captureFile, const ReplayOptions 
 
   if(m_CaptureLoaded)
   {
+    QDir tempDir(QDir::tempPath());
+    tempDir.mkpath(lit("RenderDoc"));
+    QFile activeCapture(tempDir.filePath(lit("RenderDoc/active_capture.txt")));
+    if(activeCapture.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+      activeCapture.write(m_CaptureFile.toUtf8());
+
     m_CaptureTemporary = temporary;
 
     BufferFormatter::Init(m_APIProps.pipelineType);
@@ -1543,6 +1550,8 @@ void CaptureContext::CloseCapture()
 
   m_CaptureFile = QString();
   m_RemoteFile = QString();
+
+  QFile::remove(QDir(QDir::tempPath()).filePath(lit("RenderDoc/active_capture.txt")));
 
   m_APIProps = APIProperties();
   m_FrameInfo = FrameDescription();
