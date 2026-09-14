@@ -167,6 +167,7 @@ private slots:
 
   void updateExportActionNames();
   void exportData(const BufferExport &params);
+  void exportFBX();
   void debugVertex();
   void debugMeshThread();
   void meshDebugSelector_beginDebug(const rdcfixedarray<uint32_t, 3> &group,
@@ -332,6 +333,7 @@ private:
   QMenu *m_ExportMenu = NULL;
 
   QAction *m_ExportCSV = NULL;
+  QAction *m_ExportFBX = NULL;
   QAction *m_ExportBytes = NULL;
   QAction *m_DebugVert = NULL;
   QAction *m_DebugMeshThread = NULL;

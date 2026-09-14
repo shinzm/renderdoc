@@ -741,6 +741,24 @@
     <ClCompile Include="Code\BufferFormatter.cpp">
       <Filter>Code</Filter>
     </ClCompile>
+    <ClCompile Include="Code\MeshExport.cpp">
+      <Filter>Code</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\TextureBatchExport.cpp">
+      <Filter>Code</Filter>
+    </ClCompile>
+    <ClInclude Include="Code\TextureBatchExport.h">
+      <Filter>Code</Filter>
+    </ClInclude>
+    <ClCompile Include="Code\MeshBatchExport.cpp">
+      <Filter>Code</Filter>
+    </ClCompile>
+    <ClInclude Include="Code\MeshData.h">
+      <Filter>Code</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\MeshExport.h">
+      <Filter>Code</Filter>
+    </ClInclude>
     <ClCompile Include="$(IntDir)generated\moc_ConfigEditor.cpp">
       <Filter>Generated Files</Filter>
     </ClCompile>

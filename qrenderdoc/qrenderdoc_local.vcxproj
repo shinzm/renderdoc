@@ -577,6 +577,12 @@
       </ForcedIncludeFiles>
     </ClCompile>
     <ClCompile Include="Code\BufferFormatter.cpp" />
+    <ClCompile Include="Code\MeshExport.cpp" />
+    <ClCompile Include="Code\MeshBatchExport.cpp" />
+    <ClCompile Include="Code\TextureBatchExport.cpp" />
+    <ClInclude Include="Code\TextureBatchExport.h" />
+    <ClInclude Include="Code\MeshData.h" />
+    <ClInclude Include="Code\MeshExport.h" />
     <ClCompile Include="Code\Interface\Analytics.cpp" />
     <ClCompile Include="Code\Interface\Helpers.cpp" />
     <ClCompile Include="Code\Interface\PersistentConfig.cpp" />
@@ -2186,4 +2192,5 @@
     </PropertyPageSchema>
   </ItemGroup>
   <Import Project="custom_qt.props" />
+  <Import Project="fbx.props" />
 </Project>

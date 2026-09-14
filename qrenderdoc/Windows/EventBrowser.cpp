@@ -23,6 +23,8 @@
  ******************************************************************************/
 
 #include "EventBrowser.h"
+#include "Code/MeshExport.h"
+#include "Code/TextureBatchExport.h"
 #include <QAbstractItemModel>
 #include <QAbstractSpinBox>
 #include <QComboBox>
@@ -3834,6 +3836,7 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
   connect(m_FilterTimeout, &QTimer::timeout, this, &EventBrowser::filter_apply);
 
   QObject::connect(ui->events, &RDTreeView::keyPress, this, &EventBrowser::events_keyPress);
+  ui->events->setSelectionMode(QAbstractItemView::ExtendedSelection);
   QObject::connect(ui->events->selectionModel(), &QItemSelectionModel::currentChanged, this,
                    &EventBrowser::events_currentChanged);
   ui->find->setChecked(false);
@@ -5636,12 +5639,56 @@ void EventBrowser::events_contextMenu(const QPoint &pos)
   QAction toggleBookmark(tr("Toggle &Bookmark"), this);
   QAction selectCols(tr("&Select Columns..."), this);
   QAction rgpSelect(tr("Select &RGP Event"), this);
+  QAction batchExport(tr("Batch export meshes to FBX..."), this);
+  QAction textureExport(tr("Batch export textures..."), this);
   rgpSelect.setIcon(Icons::connect());
 
   contextMenu.addAction(&expandAll);
   contextMenu.addAction(&collapseAll);
   contextMenu.addAction(&toggleBookmark);
   contextMenu.addAction(&selectCols);
+  contextMenu.addAction(&batchExport);
+  contextMenu.addAction(&textureExport);
+  textureExport.setEnabled(m_Ctx.IsCaptureLoaded());
+  QObject::connect(&textureExport, &QAction::triggered, this, [this, index]() {
+    QSet<uint32_t> selected;
+    for(const QModelIndex &row : ui->events->selectionModel()->selectedRows())
+      selected.insert(GetSelectedEID(row));
+    if(selected.isEmpty() && index.isValid()) selected.insert(GetSelectedEID(index));
+    QVector<uint32_t> events;
+    std::function<void(const rdcarray<ActionDescription> &, bool)> collect;
+    collect = [&](const rdcarray<ActionDescription> &actions, bool inGroup) {
+      for(const ActionDescription &action : actions)
+      {
+        bool include = inGroup || selected.contains(action.eventId);
+        if(include && (action.flags & (ActionFlags::Drawcall | ActionFlags::MeshDispatch | ActionFlags::Dispatch)))
+          events.push_back(action.eventId);
+        collect(action.children, include);
+      }
+    };
+    collect(m_Ctx.CurRootActions(), false);
+    ExportTexturesBatch(m_Ctx, this, events);
+  });
+  batchExport.setEnabled(m_Ctx.IsCaptureLoaded());
+  QObject::connect(&batchExport, &QAction::triggered, this, [this, index]() {
+    QSet<uint32_t> selected;
+    for(const QModelIndex &row : ui->events->selectionModel()->selectedRows())
+      selected.insert(GetSelectedEID(row));
+    if(selected.isEmpty() && index.isValid()) selected.insert(GetSelectedEID(index));
+    QVector<uint32_t> draws;
+    std::function<void(const rdcarray<ActionDescription> &, bool)> collect;
+    collect = [&](const rdcarray<ActionDescription> &actions, bool inGroup) {
+      for(const ActionDescription &action : actions)
+      {
+        bool include = inGroup || selected.contains(action.eventId);
+        if(include && (action.flags & (ActionFlags::Drawcall | ActionFlags::MeshDispatch)))
+          draws.push_back(action.eventId);
+        collect(action.children, include);
+      }
+    };
+    collect(m_Ctx.CurRootActions(), false);
+    ExportMeshesBatch(m_Ctx, this, draws);
+  });
 
   expandAll.setIcon(Icons::arrow_out());
   collapseAll.setIcon(Icons::arrow_in());

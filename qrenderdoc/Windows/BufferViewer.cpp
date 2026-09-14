@@ -23,7 +23,9 @@
  ******************************************************************************/
 
 #include "BufferViewer.h"
+#include "Code/MeshExport.h"
 #include <float.h>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFontDatabase>
 #include <QItemSelection>
@@ -491,287 +493,6 @@ private:
   ICamera *m_Cam;
 
   FloatVector m_Position, m_Rotation;
-};
-
-struct BufferData
-{
-  BufferData()
-  {
-    refcount.store(1);
-    stride = 0;
-  }
-
-  void ref() { refcount.ref(); }
-  void deref()
-  {
-    bool alive = refcount.deref();
-
-    if(!alive)
-      delete this;
-  }
-
-  size_t stride;
-  bytebuf storage;
-  QAtomicInteger<uint32_t> refcount;
-
-  const byte *data() const { return storage.begin(); };
-  const byte *end() const { return storage.end(); }
-  bool hasData() const { return !storage.empty(); }
-  size_t size() const { return storage.size(); }
-};
-
-struct BufferElementProperties
-{
-  ResourceFormat format;
-  int buffer = 0;
-  ShaderBuiltin systemValue = ShaderBuiltin::Undefined;
-  bool perinstance = false;
-  bool perprimitive = false;
-  bool floatCastWrong = false;
-  int instancerate = 1;
-};
-
-struct BufferConfiguration
-{
-  uint32_t curInstance = 0, curView = 0;
-  uint32_t numRows = 0, unclampedNumRows = 0;
-  uint32_t pagingOffset = 0;
-
-  PackingRules packing;
-  ShaderConstant fixedVars;
-  rdcarray<ShaderVariable> evalVars;
-  uint32_t repeatStride = 1;
-  uint32_t repeatOffset = 0;
-
-  QString statusString;
-
-  bool noVertices = false;
-  bool noInstances = false;
-
-  // we can have two index buffers for VSOut data:
-  // the original index buffer is used for the displayed value (in displayIndices), and the actual
-  // potentially remapped or permuated index buffer used for fetching data (in indices).
-  BufferData *displayIndices = NULL;
-  int32_t displayBaseVertex = 0;
-  BufferData *indices = NULL;
-  int32_t baseVertex = 0;
-
-  rdcfixedarray<uint32_t, 3> dispatchSize;
-  rdcarray<TaskGroupSize> taskSizes;
-  rdcarray<uint32_t> meshletVertexPrefixCounts;
-  uint32_t taskOrMeshletOffset = 0;
-  uint64_t perPrimitiveOffset = 0;
-  uint32_t perPrimitiveStride = 0;
-  Topology topology = Topology::TriangleList;
-
-  rdcarray<ShaderConstant> columns;
-  rdcarray<BufferElementProperties> props;
-
-  QVector<PixelValue> generics;
-  QVector<bool> genericsEnabled;
-  QList<BufferData *> buffers;
-  uint32_t primRestart = 0;
-
-  BufferConfiguration() = default;
-  BufferConfiguration(const BufferConfiguration &o) = delete;
-  ~BufferConfiguration() { reset(); }
-  BufferConfiguration &operator=(const BufferConfiguration &o)
-  {
-    reset();
-
-    curInstance = o.curInstance;
-    numRows = o.numRows;
-    unclampedNumRows = o.unclampedNumRows;
-    pagingOffset = o.pagingOffset;
-
-    packing = o.packing;
-    fixedVars = o.fixedVars;
-    evalVars = o.evalVars;
-    repeatStride = o.repeatStride;
-    repeatOffset = o.repeatOffset;
-
-    statusString = o.statusString;
-
-    noVertices = o.noVertices;
-    noInstances = o.noInstances;
-
-    displayIndices = o.displayIndices;
-    if(displayIndices)
-      displayIndices->ref();
-    displayBaseVertex = o.displayBaseVertex;
-
-    indices = o.indices;
-    if(indices)
-      indices->ref();
-
-    baseVertex = o.baseVertex;
-    meshletVertexPrefixCounts = o.meshletVertexPrefixCounts;
-    dispatchSize = o.dispatchSize;
-    taskSizes = o.taskSizes;
-    taskOrMeshletOffset = o.taskOrMeshletOffset;
-    perPrimitiveOffset = o.perPrimitiveOffset;
-    perPrimitiveStride = o.perPrimitiveStride;
-    topology = o.topology;
-
-    columns = o.columns;
-    props = o.props;
-    generics = o.generics;
-    genericsEnabled = o.genericsEnabled;
-    primRestart = o.primRestart;
-
-    buffers = o.buffers;
-    for(BufferData *b : buffers)
-      b->ref();
-
-    return *this;
-  }
-
-  void reset()
-  {
-    if(indices)
-      indices->deref();
-    indices = NULL;
-
-    if(displayIndices)
-      displayIndices->deref();
-    displayIndices = NULL;
-
-    for(BufferData *b : buffers)
-      b->deref();
-
-    meshletVertexPrefixCounts.clear();
-    dispatchSize = {};
-    taskSizes.clear();
-
-    buffers.clear();
-    columns.clear();
-    props.clear();
-    generics.clear();
-    genericsEnabled.clear();
-    numRows = 0;
-    unclampedNumRows = 0;
-
-    statusString.clear();
-
-    noVertices = false;
-    noInstances = false;
-  }
-
-  QString columnName(int col) const
-  {
-    if(col >= 0 && col < columns.count())
-      return columns[col].name;
-
-    return QString();
-  }
-
-  int guessPositionColumn() const
-  {
-    int posEl = -1;
-
-    if(!columns.empty())
-    {
-      // prioritise system value over general "POSITION" string matching
-      for(int i = 0; i < columns.count(); i++)
-      {
-        const BufferElementProperties &prop = props[i];
-
-        if(prop.systemValue == ShaderBuiltin::Position)
-        {
-          posEl = i;
-          break;
-        }
-      }
-
-      // look for an exact match
-      for(int i = 0; posEl == -1 && i < columns.count(); i++)
-      {
-        const ShaderConstant &el = columns[i];
-
-        if(QString(el.name).compare(lit("POSITION"), Qt::CaseInsensitive) == 0 ||
-           QString(el.name).compare(lit("POSITION0"), Qt::CaseInsensitive) == 0 ||
-           QString(el.name).compare(lit("POS"), Qt::CaseInsensitive) == 0 ||
-           QString(el.name).compare(lit("POS0"), Qt::CaseInsensitive) == 0)
-        {
-          posEl = i;
-          break;
-        }
-      }
-
-      // try anything containing position
-      for(int i = 0; posEl == -1 && i < columns.count(); i++)
-      {
-        const ShaderConstant &el = columns[i];
-
-        if(QString(el.name).contains(lit("POSITION"), Qt::CaseInsensitive))
-        {
-          posEl = i;
-          break;
-        }
-      }
-
-      // OK last resort, just look for 'pos'
-      for(int i = 0; posEl == -1 && i < columns.count(); i++)
-      {
-        const ShaderConstant &el = columns[i];
-
-        if(QString(el.name).contains(lit("POS"), Qt::CaseInsensitive))
-        {
-          posEl = i;
-          break;
-        }
-      }
-
-      // if we still have absolutely nothing, just use the first available element
-      if(posEl == -1)
-      {
-        posEl = 0;
-      }
-    }
-
-    return posEl;
-  }
-
-  int guessSecondaryColumn() const
-  {
-    int secondEl = -1;
-
-    if(!columns.empty())
-    {
-      // prioritise TEXCOORD over general COLOR
-      for(int i = 0; i < columns.count(); i++)
-      {
-        const ShaderConstant &el = columns[i];
-
-        if(QString(el.name).compare(lit("TEXCOORD"), Qt::CaseInsensitive) == 0 ||
-           QString(el.name).compare(lit("TEXCOORD0"), Qt::CaseInsensitive) == 0 ||
-           QString(el.name).compare(lit("TEX"), Qt::CaseInsensitive) == 0 ||
-           QString(el.name).compare(lit("TEX0"), Qt::CaseInsensitive) == 0 ||
-           QString(el.name).compare(lit("UV"), Qt::CaseInsensitive) == 0 ||
-           QString(el.name).compare(lit("UV0"), Qt::CaseInsensitive) == 0)
-        {
-          secondEl = i;
-          break;
-        }
-      }
-
-      for(int i = 0; secondEl == -1 && i < columns.count(); i++)
-      {
-        const ShaderConstant &el = columns[i];
-
-        if(QString(el.name).compare(lit("COLOR"), Qt::CaseInsensitive) == 0 ||
-           QString(el.name).compare(lit("COLOR0"), Qt::CaseInsensitive) == 0 ||
-           QString(el.name).compare(lit("COL"), Qt::CaseInsensitive) == 0 ||
-           QString(el.name).compare(lit("COL0"), Qt::CaseInsensitive) == 0)
-        {
-          secondEl = i;
-          break;
-        }
-      }
-    }
-
-    return secondEl;
-  }
 };
 
 uint32_t CalcIndex(BufferData *data, uint32_t vertID, int32_t baseVertex, uint32_t primRestart)
@@ -1667,96 +1388,7 @@ static void ConfigureColumnsForShader(ICaptureContext &ctx, int32_t streamSelect
                                       rdcarray<ShaderConstant> &columns,
                                       rdcarray<BufferElementProperties> &props)
 {
-  if(!shader)
-    return;
-
-  columns.reserve(shader->outputSignature.count());
-  props.reserve(shader->outputSignature.count());
-
-  int i = 0, posidx = -1;
-  for(const SigParameter &sig : shader->outputSignature)
-  {
-    if(sig.stream != (uint32_t)streamSelect)
-      continue;
-
-    if(sig.systemValue == ShaderBuiltin::OutputIndices)
-      continue;
-
-    ShaderConstant f;
-    BufferElementProperties p;
-
-    f.name = !sig.varName.isEmpty() ? sig.varName : sig.semanticIdxName;
-    if(sig.perPrimitiveRate)
-      f.name += lit(" (Per-Prim)");
-    f.type.rows = 1;
-    f.type.columns = sig.compCount;
-
-    p.buffer = 0;
-    p.perinstance = false;
-    p.perprimitive = sig.perPrimitiveRate;
-    p.instancerate = 1;
-    p.systemValue = sig.systemValue;
-    p.format.type = ResourceFormatType::Regular;
-    p.format.compByteWidth = qMax<uint32_t>(sizeof(float), VarTypeByteSize(sig.varType));
-    p.format.compCount = sig.compCount;
-    p.format.compType = VarTypeCompType(sig.varType);
-
-    f.type.arrayByteStride = p.format.compByteWidth * p.format.compCount;
-
-    if(sig.systemValue == ShaderBuiltin::Position)
-      posidx = i;
-
-    columns.push_back(f);
-    props.push_back(p);
-
-    i++;
-  }
-
-  // shift position attribute up to first, keeping order otherwise
-  // the same
-  if(posidx > 0)
-  {
-    columns.insert(0, columns.takeAt(posidx));
-    props.insert(0, props.takeAt(posidx));
-  }
-
-  i = 0;
-  uint32_t perPrimOffset = 0, perVertOffset = 0;
-  for(i = 0; i < columns.count(); i++)
-  {
-    BufferElementProperties &prop = props[i];
-    ShaderConstant &el = columns[i];
-
-    uint numComps = el.type.columns;
-    uint elemSize = prop.format.compByteWidth > 4 ? 8U : 4U;
-
-    MeshDataStage outStage = MeshDataStage::VSOut;
-
-    switch(shader->stage)
-    {
-      case ShaderStage::Vertex: outStage = MeshDataStage::VSOut; break;
-      case ShaderStage::Hull: outStage = MeshDataStage::GSOut; break;
-      case ShaderStage::Domain: outStage = MeshDataStage::GSOut; break;
-      case ShaderStage::Geometry: outStage = MeshDataStage::GSOut; break;
-      case ShaderStage::Task: outStage = MeshDataStage::TaskOut; break;
-      case ShaderStage::Mesh: outStage = MeshDataStage::MeshOut; break;
-      default: break;
-    }
-
-    uint32_t &offset = prop.perprimitive ? perPrimOffset : perVertOffset;
-
-    if(ctx.CurPipelineState().HasAlignedPostVSData(outStage))
-    {
-      if(numComps == 2)
-        offset = AlignUp(offset, 2U * elemSize);
-      else if(numComps > 2)
-        offset = AlignUp(offset, 4U * elemSize);
-    }
-
-    el.byteOffset = offset;
-
-    offset += numComps * elemSize;
-  }
+  ConfigureMeshOutputColumns(ctx.CurPipelineState(), streamSelect, shader, columns, props);
 }
 
 static void ConfigureColumnsForMeshPipe(ICaptureContext &ctx, PopulateBufferData *bufdata)
@@ -2498,6 +2130,9 @@ BufferViewer::BufferViewer(ICaptureContext &ctx, bool meshview, QWidget *parent)
 
   m_ExportMenu->addAction(m_ExportCSV);
   m_ExportMenu->addAction(m_ExportBytes);
+  m_ExportFBX = new QAction(tr("Export mesh to &FBX..."), this);
+  m_ExportMenu->addAction(m_ExportFBX);
+  QObject::connect(m_ExportFBX, &QAction::triggered, this, &BufferViewer::exportFBX);
 
   m_DebugVert = new QAction(tr("&Debug this Vertex"), this);
   m_DebugVert->setIcon(Icons::wrench());
@@ -6363,6 +5998,8 @@ void BufferViewer::updateExportActionNames()
   QString bytes = tr("Export%1 to &Bytes");
 
   bool valid = m_Ctx.IsCaptureLoaded() && m_Ctx.CurAction();
+  m_ExportFBX->setVisible(m_MeshView);
+  m_ExportFBX->setEnabled(valid && m_MeshView && m_CurView != NULL);
 
   if(m_MeshView)
   {
@@ -6429,6 +6066,55 @@ void BufferViewer::exportCSV(QTextStream &ts, const QString &prefix, RDTreeWidge
     for(int i = 0; i < item->childCount(); i++)
       exportCSV(ts, item->text(0) + lit("."), item->child(i));
   }
+}
+
+void BufferViewer::exportFBX()
+{
+#ifndef RENDERDOC_FBX_SDK
+  RDDialog::critical(this, tr("FBX export unavailable"),
+                     tr("This build does not include the Autodesk FBX SDK. See "
+                        "qrenderdoc/FBX_EXPORT.md for build instructions."));
+#else
+  if(!m_MeshView || !m_CurView || !m_Ctx.IsCaptureLoaded() || !m_Ctx.CurAction())
+    return;
+
+  // Retain the data across modal dialogs and replay/event changes.
+  BufferConfiguration config;
+  config = ((BufferItemModel *)m_CurView->model())->getConfig();
+  const Topology topology = m_CurView == ui->inTable     ? m_InPosition.topology
+                            : m_CurView == ui->out1Table ? m_Out1Position.topology
+                                                         : m_Out2Position.topology;
+  if((topology != Topology::TriangleList && topology != Topology::TriangleStrip &&
+      topology != Topology::TriangleFan) ||
+     config.numRows == 0 || config.pagingOffset != 0 || config.unclampedNumRows > config.numRows ||
+     config.noVertices || config.noInstances)
+  {
+    RDDialog::critical(this, tr("Cannot export mesh"),
+                       tr("FBX export requires complete triangle list, strip or fan data."));
+    return;
+  }
+
+  QVector<FBXAttributeMapping> selected;
+  if(!EditFBXMapping(this, config, selected))
+    return;
+  QString filename =
+      RDDialog::getSaveFileName(this, tr("Export mesh to FBX"), QString(), tr("FBX Files (*.fbx)"));
+  if(filename.isEmpty())
+    return;
+  if(!filename.endsWith(lit(".fbx"), Qt::CaseInsensitive))
+    filename += lit(".fbx");
+
+  QString error;
+  LambdaThread *worker = new LambdaThread([&config, topology, selected, filename, &error]() {
+    error = WriteFBXMesh(config, topology, selected, filename);
+  });
+  worker->start();
+  ShowProgressDialog(this, tr("Exporting FBX"), [worker]() { return !worker->isRunning(); });
+  worker->wait();
+  worker->deleteLater();
+  if(!error.isEmpty())
+    RDDialog::critical(this, tr("Error exporting FBX"), error);
+#endif
 }
 
 void BufferViewer::exportData(const BufferExport &params)
