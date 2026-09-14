@@ -1774,7 +1774,9 @@ void WrappedID3D12QueryHeap::ResolveValidQueryData(ID3D12GraphicsCommandList *li
     // doesn't matter if the query is valid or not we will still need to resolve it
     UINT start = i;
 
-    for(; i < m_Valid.size(); i++)
+    // Only coalesce queries within the requested range. Matching queries beyond it
+    // must not enlarge the resolve or copy into the destination buffer.
+    for(; i < end; i++)
       if(m_Valid[i] != m_Valid[start])
         break;
 
