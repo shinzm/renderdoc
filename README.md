@@ -1,3 +1,17 @@
+以下为本分支新增的功能和修复，后附完整原版 README；也可查看 [RenderDoc 官方 README](https://github.com/baldurk/renderdoc/blob/v1.x/README.md)。
+
+# RenderDoc · YiMeng 分支
+
+- **FBX 网格导出**：在 Mesh Viewer 导出单个网格，或在 Event Browser 按事件、标记组和实例批量导出。支持顶点属性映射、多组 UV/颜色、自定义数据，以及可选的分量重映射、归一化和 UV 翻转。需启用 Autodesk FBX SDK；不重建材质、骨骼或动画。[使用与构建说明](qrenderdoc/FBX_EXPORT.md)
+- **纹理批量导出**：在 Event Browser 收集所选事件绑定的纹理，预检后导出 DDS、PNG 或 EXR，并生成 JSON 报告。支持按事件保存快照和相同内容去重；目前仅支持单采样、非数组 2D 纹理的 mip 0。[使用说明](qrenderdoc/TEXTURE_BATCH_EXPORT.md)
+- **Vulkan 多实例联动捕获**：触发捕获时同步开始和结束同一进程中其他 Vulkan 实例的捕获，并输出 `Vulkan bridge:` 诊断日志。各实例分别生成捕获文件，用于排查渲染与呈现分属不同实例时漏抓命令的问题。
+- **当前捕获路径记录**：打开捕获文件后，将路径写入临时目录下的 `RenderDoc/active_capture.txt`，关闭捕获时删除，便于外部工具定位当前文件。
+- **D3D12 查询范围修复**：将查询结果解析限制在请求范围内，避免合并相邻查询时扩大解析及目标缓冲区写入范围。
+
+---
+
+<!-- 以下保留原版 README -->
+
 <p align="center"><img src="https://user-images.githubusercontent.com/661798/36482670-f81601c0-170b-11e8-8adb-2365b346ac27.png" /></p>
 
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
