@@ -402,33 +402,18 @@ void TextureViewer::UI_UpdateCachedTexture()
     return;
   }
 
-  bool debugOutput = false;
-
   ResourceId id = m_LockedId;
   if(id == ResourceId())
-  {
-    debugOutput = m_Following.Type == FollowType::OutputColor ||
-                  m_Following.Type == FollowType::OutputDepth ||
-                  m_Following.Type == FollowType::OutputDepthResolve;
     id = m_Following.GetResourceId(m_Ctx);
-  }
 
   if(id == ResourceId())
-  {
-    debugOutput = false;
     id = m_TexDisplay.resourceId;
-  }
 
   m_CachedTexture = m_Ctx.GetTexture(id);
 
   if(m_CachedTexture != NULL)
   {
-    if(!debugOutput)
-    {
-      ui->debugPixelContext->setEnabled(false);
-      ui->debugPixelContext->setToolTip(tr("No output texture selected"));
-    }
-    else if(m_Ctx.APIProps().shaderDebugging)
+    if(m_Ctx.APIProps().shaderDebugging)
     {
       const ShaderReflection *shaderDetails =
           m_Ctx.CurPipelineState().GetShaderReflection(ShaderStage::Pixel);
@@ -1042,12 +1027,7 @@ void TextureViewer::UI_UpdateStatusText()
   QString pickedText;
   QString pickedTooltip;
 
-  if(tex.format.type == ResourceFormatType::Regular && tex.format.compByteWidth == 8 &&
-     (tex.format.compType == CompType::UInt || tex.format.compType == CompType::SInt))
-  {
-    pickedText = tr("64-bit int textures can't be displayed");
-  }
-  else if(m_PickedPoint.x() >= 0)
+  if(m_PickedPoint.x() >= 0)
   {
     x = MipCoordFromBase(m_PickedPoint.x(), tex.width);
     y = MipCoordFromBase(m_PickedPoint.y(), tex.height);

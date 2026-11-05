@@ -14,11 +14,7 @@ If you have any queries or concerns in this regard you can get in touch with me 
 
 ## Use of LLMs / "AI"
 
-Strictly no use whatsoever of LLMs or any similar technology is allowed for any code contributed to RenderDoc.
-
-Use of any LLMs in issue or PR description text for anything other than translation between languages is also strictly not allowed.
-
-There are no exceptions to these rules.
+Strictly no use whatsoever of LLMs or any similar technology is allowed for any code contributed to RenderDoc. There are no exceptions to this rule.
 
 ## Acceptable use of RenderDoc
 

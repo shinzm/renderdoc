@@ -1767,16 +1767,14 @@ QWidget *PythonContext::QWidgetFromPy(PyObject *widget)
 
 void PythonContext::reflectSource(QString src)
 {
-  if(m_DeferredInit == 0)
+  if(!m_Reflector)
   {
     for(int i = 0; i < 50 && m_DeferredInit == 0; i++)
       QThread::msleep(20);
+    m_DeferredInit = 1;
 
     if(!m_Reflector)
-    {
-      m_DeferredInit = 1;
       return;
-    }
   }
 
   PyGILState_STATE gil = PyGILState_Ensure();
@@ -1801,16 +1799,15 @@ void PythonContext::reflectSource(QString src)
 void PythonContext::makeHelpContext()
 {
   // expand out members of renderdoc and qrenderdoc using the stubs
-  if(m_DeferredInit == 0)
+  if(!m_StubRD || !m_StubQRD)
   {
     for(int i = 0; i < 50 && m_DeferredInit == 0; i++)
       QThread::msleep(20);
 
+    m_DeferredInit = 1;
+
     if(!m_StubRD || !m_StubQRD)
-    {
-      m_DeferredInit = 1;
       return;
-    }
   }
 
   PyGILState_STATE gil = PyGILState_Ensure();

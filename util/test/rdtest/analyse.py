@@ -6,7 +6,7 @@ from . import util
 
 
 def open_capture(
-    filename="", opts: rd.ReplayOptions | None = None
+    filename="", cap: rd.CaptureFile | None = None, opts: rd.ReplayOptions | None = None
 ):
     """
     Opens a capture file and begins a replay.
@@ -21,28 +21,32 @@ def open_capture(
     if opts is None:
         opts = rd.ReplayOptions()
 
-    cap = None
+    # Open a capture file handle
+    own_cap = False
     api = "Unknown"
 
     result = None
     controller = None
     if util.get_remote_server() is None:
-        cap = rd.OpenCaptureFile()
+        if cap is None:
+            own_cap = True
 
-        # Open a particular file
-        result = cap.OpenFile(filename, '', None)
+            cap = rd.OpenCaptureFile()
 
-        # Make sure the file opened successfully
-        if not result:
-            cap.Shutdown()
-            raise RuntimeError(f"Couldn't open '{filename}': {result!s}")
+            # Open a particular file
+            result = cap.OpenFile(filename, '', None)
 
-        api = cap.DriverName()
+            # Make sure the file opened successfully
+            if not result:
+                cap.Shutdown()
+                raise RuntimeError(f"Couldn't open '{filename}': {result!s}")
 
-        # Make sure we can replay
-        if not cap.LocalReplaySupport():
-            cap.Shutdown()
-            raise RuntimeError(f"{api} capture cannot be replayed")
+            api = cap.DriverName()
+
+            # Make sure we can replay
+            if not cap.LocalReplaySupport():
+                cap.Shutdown()
+                raise RuntimeError(f"{api} capture cannot be replayed")
 
         result, controller = cap.OpenCapture(opts, None)
     else:
@@ -54,10 +58,13 @@ def open_capture(
         if result:
             api = util.get_remote_server().remote.DriverName()
 
+    if own_cap:
+        cap.Shutdown()
+
     if not result:
         raise RuntimeError(f"Couldn't initialise replay for {api}: {result!s}")
 
-    return cap, controller
+    return controller
 
 
 def fetch_indices(controller: rd.ReplayController, action: rd.ActionDescription, mesh: rd.MeshFormat, index_offset: int, first_index: int, num_indices: int) -> List[int | None]:

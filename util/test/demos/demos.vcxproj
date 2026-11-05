@@ -104,6 +104,30 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
+  <PropertyGroup Condition="$(Platform)=='x64' and exists('3rdparty/shaderc/x64/lib/shaderc_combined.lib') and $(PlatformToolset)=='v143'">
+    <HaveShaderc>1</HaveShaderc>
+  </PropertyGroup>
+  <PropertyGroup Condition="$(Platform)=='x86' and exists('3rdparty/shaderc/x86/lib/shaderc_combined.lib') and $(PlatformToolset)=='v143'">
+    <HaveShaderc>1</HaveShaderc>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="$(Platform)=='x64' and $(HaveShaderc)=='1'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>3rdparty/shaderc/x64/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>HAVE_SHADERC=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>3rdparty/shaderc/x64/lib/shaderc_combined.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="$(Platform)=='x86' and $(HaveShaderc)=='1'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>3rdparty/shaderc/x86/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>HAVE_SHADERC=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>3rdparty/shaderc/x86/lib/shaderc_combined.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="3rdparty\fmt\format.cc" />
     <ClCompile Include="3rdparty\md5\md5.c" />
@@ -158,7 +182,6 @@
     <ClCompile Include="d3d11\d3d11_shader_linkage_zoo.cpp" />
     <ClCompile Include="d3d11\d3d11_simple_dispatch.cpp" />
     <ClCompile Include="d3d11\d3d11_simple_triangle.cpp" />
-    <ClCompile Include="d3d11\d3d11_storage_raster.cpp" />
     <ClCompile Include="d3d11\d3d11_stream_out.cpp" />
     <ClCompile Include="d3d11\d3d11_stripped_shaders.cpp" />
     <ClCompile Include="d3d11\d3d11_structured_buffer_misaligned_dirty.cpp" />
@@ -215,7 +238,6 @@
     <ClCompile Include="d3d12\d3d12_sharing.cpp" />
     <ClCompile Include="d3d12\d3d12_simple_dispatch.cpp" />
     <ClCompile Include="d3d12\d3d12_simple_triangle.cpp" />
-    <ClCompile Include="d3d12\d3d12_stripped_shaders.cpp" />
     <ClCompile Include="d3d12\d3d12_subgroup_zoo.cpp" />
     <ClCompile Include="d3d12\d3d12_swapchain_zoo.cpp" />
     <ClCompile Include="d3d12\d3d12_template.cpp" />
@@ -311,7 +333,6 @@
     <ClCompile Include="vk\vk_descriptor_buffer_analyse.cpp" />
     <ClCompile Include="vk\vk_descriptor_reuse.cpp" />
     <ClCompile Include="vk\vk_descriptor_variable_count.cpp" />
-    <ClCompile Include="vk\vk_device_address_commands.cpp" />
     <ClCompile Include="vk\vk_discard_zoo.cpp" />
     <ClCompile Include="vk\vk_dynamic_rendering.cpp" />
     <ClCompile Include="vk\vk_empty_capture.cpp" />
@@ -350,8 +371,6 @@
     <ClCompile Include="vk\vk_shader_printf.cpp" />
     <ClCompile Include="vk\vk_spec_constants.cpp" />
     <ClCompile Include="vk\vk_spirv_13_shaders.cpp" />
-    <ClCompile Include="vk\vk_storage_raster.cpp" />
-    <ClCompile Include="vk\vk_stripped_shaders.cpp" />
     <ClCompile Include="vk\vk_subgroup_zoo.cpp" />
     <ClCompile Include="vk\vk_sync2.cpp" />
     <ClCompile Include="vk\vk_template.cpp" />
@@ -445,6 +464,7 @@
     <ClInclude Include="3rdparty\nuklear\nuklear.h" />
     <ClInclude Include="3rdparty\nuklear\nuklear_gdi.h" />
     <ClInclude Include="3rdparty\nuklear\nuklear_xlib.h" />
+    <ClInclude Include="3rdparty\shaderc\shaderc.h" />
     <ClInclude Include="renderdoc_app.h" />
     <ClInclude Include="test_common.h" />
     <ClInclude Include="vk\vk_headers.h" />
@@ -533,6 +553,8 @@ namespace DXCEnumerateAndCheck {
       <Output TaskParameter="DebugOut" PropertyName="DebugOutDXC" />
     </GetDXCDLL>
     <Message Condition="$(DXCDLLFolder.Length) &gt; 0" Importance="high" Text="Using DXC/D3DCompiler dlls from $(DXCDLLFolder)." />
+    <Message Condition="$(HaveShaderc)=='1'" Importance="high" Text="Built with linked shaderc." />
+    <Message Condition="$(HaveShaderc)!='1'" Importance="high" Text="Not built with linked shaderc." />
     <PropertyGroup Condition="$(DXCDLLFolder.Length) &gt; 0">
       <DXCDLLSourceLocation>$(DXCDLLFolder)</DXCDLLSourceLocation>
     </PropertyGroup>

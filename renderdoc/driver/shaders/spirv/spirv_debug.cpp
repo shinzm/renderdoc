@@ -2979,27 +2979,45 @@ void ThreadState::StepNext(bool useDebugState, const uint32_t steps,
 
       RDCASSERT(uintComp(GetSrc(group.execution), 0) == (uint32_t)Scope::Subgroup);
 
-      ShaderVariable var = GetSrc(group.value);
+      // determine active lane indices in our subgroup
+      rdcarray<uint32_t> activeLanes;
 
-      // iterate all lanes from bottom to top or top to bottom
-      for(uint32_t idx = 0; idx < debugger.GetSubgroupSize(); idx++)
+      const uint32_t firstLaneInSub = workgroupIndex - subgroupId;
+      for(uint32_t lane = firstLaneInSub; lane < firstLaneInSub + debugger.GetSubgroupSize(); lane++)
       {
-        uint32_t lane = idx;
-        if(opdata.op == Op::GroupNonUniformBallotFindMSB)
+        RDCASSERT(lane < activeMask.size(), lane, activeMask.size());
+        if(activeMask[lane])
         {
-          lane = debugger.GetSubgroupSize() - 1 - idx;
+          activeLanes.push_back(lane - firstLaneInSub);
+          RDCASSERTEQUAL(workgroup[lane - firstLaneInSub].currentInstruction, currentInstruction);
         }
+      }
+
+      ShaderVariable var = GetSrc(group.value);
+      RDCEraseEl(var.value);
+
+      // iterate activeLanes from bottom to top or top to bottom
+      for(uint32_t idx = 0; idx < activeLanes.size(); idx++)
+      {
+        uint32_t lane = activeLanes[idx];
+        if(opdata.op == Op::GroupNonUniformBallotFindMSB)
+          activeLanes[activeLanes.size() - 1 - idx];
 
         uint32_t c = lane / 32;
         uint32_t bit = 1U << (lane % 32U);
 
+        bool set = false;
+
         // is the corresponding bit set?
-        bool set = (var.value.u32v[c] & bit) ? 1 : 0;
+#undef _IMPL
+#define _IMPL(I, S, U) set = (comp<U>(var, c) & bit) != 0;
+
+        IMPL_FOR_INT_TYPES(_IMPL);
 
         // if so, it's our return index
         if(set)
         {
-          var.value.u32v[0] = lane;
+          var.value.u32v[0] = idx;
           break;
         }
       }
@@ -3044,9 +3062,8 @@ void ThreadState::StepNext(bool useDebugState, const uint32_t steps,
       ShaderVariable var = GetSrc(group.value);
 
       // look the desired lane up in the mask
-      uint32_t idx = uintComp(GetSrc(group.index), 0);
-      uint32_t c = idx / 32;
-      uint32_t bit = 1U << (idx % 32U);
+      uint32_t c = uintComp(GetSrc(group.index), 0) / 32;
+      uint32_t bit = 1U << (subgroupId % 32U);
 
       var.value.u32v[0] = (var.value.u32v[c] & bit) ? 1 : 0;
       var.value.u32v[1] = var.value.u32v[2] = var.value.u32v[3] = 0;
@@ -3329,7 +3346,7 @@ void ThreadState::StepNext(bool useDebugState, const uint32_t steps,
     {
       ShaderVariable var;
 
-      uint32_t clusterSize = debugger.GetSubgroupSize();
+      uint32_t clusterMask = 0;
       GroupOperation groupOp = GroupOperation::Reduce;
 
       Id valueId;
@@ -3366,7 +3383,7 @@ void ThreadState::StepNext(bool useDebugState, const uint32_t steps,
           RDCASSERT(uintComp(GetSrc(group.execution), 0) == (uint32_t)Scope::Subgroup);
 
           if(group.HasClusterSize())
-            clusterSize = uintComp(GetSrc(group.clusterSize), 0);
+            clusterMask = (1U << uintComp(GetSrc(group.clusterSize), 0)) - 1;
           break;
         }
         case Op::GroupNonUniformAny:
@@ -3467,26 +3484,15 @@ void ThreadState::StepNext(bool useDebugState, const uint32_t steps,
       // determine active lane indices in our subgroup or cluster
       rdcarray<uint32_t> activeLanes;
 
-      // IDs: 0,1,2,3,4,5,6,7
-      // ClusterSize 1
-      // | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
-      // ClusterSize 2
-      // | 0,1 | 2,3 | 4,5 | 6,7 |
-      // ClusterSize 4
-      // | 0,1,2,3 | 4,5,6,7 |
-      // ClusterSize 8
-      // | 0,1,2,3,4,5,6,7 |
-
       const uint32_t firstLaneInSub = workgroupIndex - subgroupId;
-      const uint32_t myCluster = subgroupId / clusterSize;
       for(uint32_t lane = firstLaneInSub; lane < firstLaneInSub + debugger.GetSubgroupSize(); lane++)
       {
         RDCASSERT(lane < activeMask.size(), lane, activeMask.size());
         if(activeMask[lane])
         {
-          const uint32_t laneCluster = (lane - firstLaneInSub) / clusterSize;
           // if this is in our cluster (or we're not clustering)
-          if(groupOp != GroupOperation::ClusteredReduce || (laneCluster == myCluster))
+          if(groupOp != GroupOperation::ClusteredReduce ||
+             ((lane & clusterMask) == (subgroupId & clusterMask)))
             activeLanes.push_back(lane);
         }
       }
@@ -3651,7 +3657,7 @@ void ThreadState::StepNext(bool useDebugState, const uint32_t steps,
             default: break;
           }
 
-          // stop after processing our lane if we're inclusive scan
+          // stop after processing our lane if we're inclusive scane
           if(groupOp == GroupOperation::InclusiveScan && lane == workgroupIndex)
           {
             SetDst(opdata.result, var);
@@ -3672,7 +3678,7 @@ void ThreadState::StepNext(bool useDebugState, const uint32_t steps,
         ShaderVariable mask = GetSrc(valueId);
         uint32_t count = 0;
 
-        for(uint32_t lane = firstLaneInSub; lane < firstLaneInSub + debugger.GetSubgroupSize(); lane++)
+        for(uint32_t lane : activeLanes)
         {
           // stop before processing our lane if we're exclusive scan
           if(groupOp == GroupOperation::ExclusiveScan && lane == workgroupIndex)
@@ -3685,7 +3691,7 @@ void ThreadState::StepNext(bool useDebugState, const uint32_t steps,
 
           count += (comp<uint32_t>(mask, c) & bit) ? 1 : 0;
 
-          // stop after processing our lane if we're inclusive scan
+          // stop after processing our lane if we're inclusive scane
           if(groupOp == GroupOperation::InclusiveScan && lane == workgroupIndex)
             break;
         }

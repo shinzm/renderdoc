@@ -374,43 +374,18 @@ Processor::~Processor()
 {
 }
 
-bool Processor::Parse(const rdcarray<uint32_t> &spirvWords)
+void Processor::Parse(const rdcarray<uint32_t> &spirvWords)
 {
-  if(spirvWords.size() < FirstRealWord || spirvWords[0] != MagicNumber)
-  {
-    RDCERR("Empty or invalid SPIR-V module");
-    return false;
-  }
-
-  uint32_t packedVersion = spirvWords[1];
-
-  // Bytes: 0 | major | minor | 0
-  m_MajorVersion = uint8_t((packedVersion & 0x00ff0000) >> 16);
-  m_MinorVersion = uint8_t((packedVersion & 0x0000ff00) >> 8);
-
-  if(packedVersion > VersionPacked)
-  {
-    RDCERR("Unsupported SPIR-V version: %08x", packedVersion);
-    return false;
-  }
-
   m_SPIRV = spirvWords;
 
-  return Parse();
-}
-
-bool Processor::Parse(const void *spirvWords, size_t byteSize)
-{
-  const uint32_t wordCount = byteSize / sizeof(uint32_t);
-  const uint32_t *words = (const uint32_t *)spirvWords;
-
-  if(wordCount < FirstRealWord || words[0] != MagicNumber)
+  if(m_SPIRV.size() < FirstRealWord || m_SPIRV[0] != MagicNumber)
   {
     RDCERR("Empty or invalid SPIR-V module");
-    return false;
+    m_SPIRV.clear();
+    return;
   }
 
-  uint32_t packedVersion = words[1];
+  uint32_t packedVersion = m_SPIRV[1];
 
   // Bytes: 0 | major | minor | 0
   m_MajorVersion = uint8_t((packedVersion & 0x00ff0000) >> 16);
@@ -419,41 +394,10 @@ bool Processor::Parse(const void *spirvWords, size_t byteSize)
   if(packedVersion > VersionPacked)
   {
     RDCERR("Unsupported SPIR-V version: %08x", packedVersion);
-    return false;
+    m_SPIRV.clear();
+    return;
   }
 
-  m_SPIRV.assign(words, wordCount);
-
-  return Parse();
-}
-
-bool Processor::Parse(rdcarray<uint32_t> &&spirvWords)
-{
-  if(spirvWords.size() < FirstRealWord || spirvWords[0] != MagicNumber)
-  {
-    RDCERR("Empty or invalid SPIR-V module");
-    return false;
-  }
-
-  uint32_t packedVersion = spirvWords[1];
-
-  // Bytes: 0 | major | minor | 0
-  m_MajorVersion = uint8_t((packedVersion & 0x00ff0000) >> 16);
-  m_MinorVersion = uint8_t((packedVersion & 0x0000ff00) >> 8);
-
-  if(packedVersion > VersionPacked)
-  {
-    RDCERR("Unsupported SPIR-V version: %08x", packedVersion);
-    return false;
-  }
-
-  m_SPIRV = std::move(spirvWords);
-
-  return Parse();
-}
-
-bool Processor::Parse()
-{
   m_Generator = Generator(m_SPIRV[2] >> 16);
   m_GeneratorVersion = m_SPIRV[2] & 0xffff;
 
@@ -575,8 +519,6 @@ bool Processor::Parse()
     if(m_Sections[s - 1].startOffset == 0)
       m_Sections[s - 1].startOffset = m_Sections[s - 1].endOffset;
   }
-
-  return true;
 }
 
 void Processor::PreParse(uint32_t maxId)

@@ -33,18 +33,18 @@ struct MetalInitialContents
   {
     RDCCOMPILE_ASSERT(std::is_standard_layout<MetalInitialContents>::value,
                       "MetalInitialContents must be POD");
-    memset((void *)this, 0, sizeof(*this));
+    memset(this, 0, sizeof(*this));
   }
 
   MetalInitialContents(MetalResourceType t)
   {
-    memset((void *)this, 0, sizeof(*this));
+    memset(this, 0, sizeof(*this));
     type = t;
   }
 
   MetalInitialContents(MetalResourceType t, bytebuf data)
   {
-    memset((void *)this, 0, sizeof(*this));
+    memset(this, 0, sizeof(*this));
     type = t;
     resourceContents = data;
   }

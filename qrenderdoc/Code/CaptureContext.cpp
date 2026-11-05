@@ -27,6 +27,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QLabel>
@@ -517,12 +518,8 @@ rdcarray<ExtensionMetadata> CaptureContext::GetInstalledExtensions()
 
             if(badversion)
             {
-              if(!m_BadVerExtensions.contains(rdcstr(package)))
-              {
-                qInfo() << "Extension" << QString(ext.name) << "declares minimum_renderdoc"
-                        << minVer << "so skipping";
-                m_BadVerExtensions.push_back(rdcstr(package));
-              }
+              qInfo() << "Extension" << QString(ext.name) << "declares minimum_renderdoc" << minVer
+                      << "so skipping";
               continue;
             }
           }
@@ -577,8 +574,7 @@ rdcstr CaptureContext::LoadExtension(rdcstr name)
     else
     {
       m_ExtensionObjects.remove(name);
-      if(!m_FailedExtensions.contains(name))
-        m_FailedExtensions.push_back(name);
+      m_FailedExtensions.push_back(name);
 
       for(QObject *o : m_PendingExtensionObjects)
         delete o;
@@ -591,8 +587,6 @@ rdcstr CaptureContext::LoadExtension(rdcstr name)
     CleanMenu(a);
 
   m_RegisteredMenuItems.removeAll(NULL);
-
-  emit PythonContext::GetExtensionContext()->extensionsUpdated();
 
   return ret;
 }
@@ -1010,6 +1004,12 @@ void CaptureContext::LoadCapture(const rdcstr &captureFile, const ReplayOptions 
 
   if(m_CaptureLoaded)
   {
+    QDir tempDir(QDir::tempPath());
+    tempDir.mkpath(lit("RenderDoc"));
+    QFile activeCapture(tempDir.filePath(lit("RenderDoc/active_capture.txt")));
+    if(activeCapture.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+      activeCapture.write(m_CaptureFile.toUtf8());
+
     m_CaptureTemporary = temporary;
 
     BufferFormatter::Init(m_APIProps.pipelineType);
@@ -1228,32 +1228,29 @@ void CaptureContext::LoadCaptureThreaded(const QString &captureFile, const Repla
             .arg(origFilename));
   }
 
-  Replay().BlockAccessInvoke([this](ICaptureAccess *access) {
+  ICaptureAccess *access = Replay().GetCaptureAccess();
+
+  if(access)
+  {
     int idx = access->FindSectionByType(SectionType::ResourceRenames);
     if(idx >= 0)
     {
       bytebuf buf = access->GetSectionContents(idx);
-      GUIInvoke::call(m_MainWindow, [this, buf]() {
-        LoadRenames(QString::fromUtf8((const char *)buf.data(), buf.count()));
-      });
+      LoadRenames(QString::fromUtf8((const char *)buf.data(), buf.count()));
     }
 
     idx = access->FindSectionByType(SectionType::Bookmarks);
     if(idx >= 0)
     {
       bytebuf buf = access->GetSectionContents(idx);
-      GUIInvoke::call(m_MainWindow, [this, buf]() {
-        LoadBookmarks(QString::fromUtf8((const char *)buf.data(), buf.count()));
-      });
+      LoadBookmarks(QString::fromUtf8((const char *)buf.data(), buf.count()));
     }
 
     idx = access->FindSectionByType(SectionType::Notes);
     if(idx >= 0)
     {
       bytebuf buf = access->GetSectionContents(idx);
-      GUIInvoke::call(m_MainWindow, [this, buf]() {
-        LoadNotes(QString::fromUtf8((const char *)buf.data(), buf.count()));
-      });
+      LoadNotes(QString::fromUtf8((const char *)buf.data(), buf.count()));
     }
 
     idx = access->FindSectionByType(SectionType::EditedShaders);
@@ -1274,7 +1271,7 @@ void CaptureContext::LoadCaptureThreaded(const QString &captureFile, const Repla
     {
       ANALYTIC_ADDUNIQ(APIs, driver);
     }
-  });
+  }
 
   m_LoadInProgress = false;
   m_CaptureLoaded = true;
@@ -1319,10 +1316,6 @@ void CaptureContext::RecompressCapture()
 
     destFilename = m_MainWindow->GetSavePath();
 
-    // the user can also cancel the save dialog after clicking yes
-    if(destFilename.isEmpty())
-      return;
-
     // if it's already local, we'll do the save as part of the recompression convert. If it's
     // remote, we need to copy it first, but we copy it to a temporary so we can do the conversion
     // to the target location
@@ -1356,11 +1349,6 @@ void CaptureContext::RecompressCapture()
   {
     // for local files we already have a handle. We'll reuse it, then re-open
     cap = m_Replay.GetCaptureFile();
-    if(!cap)
-    {
-      m_Replay.ReopenCaptureFile(m_CaptureFile);
-      cap = m_Replay.GetCaptureFile();
-    }
   }
   else
   {
@@ -1565,6 +1553,8 @@ void CaptureContext::CloseCapture()
 
   m_CaptureFile = QString();
   m_RemoteFile = QString();
+
+  QFile::remove(QDir(QDir::tempPath()).filePath(lit("RenderDoc/active_capture.txt")));
 
   m_APIProps = APIProperties();
   m_FrameInfo = FrameDescription();
@@ -2964,8 +2954,6 @@ void CaptureContext::ExtensionTouched(const QString &extensionPath)
       m_DirtyExtensions.push_back(m.package);
     }
   }
-
-  emit PythonContext::GetExtensionContext()->extensionsUpdated();
 }
 
 void CaptureContext::RaiseDockWindow(QWidget *dockWindow)
@@ -3131,16 +3119,22 @@ void CaptureContext::AddDockWindow(QWidget *newWindow, DockReference ref, QWidge
 
 void CaptureContext::EmbedDependentFiles()
 {
-  bool done = false;
-
-  if(!Replay().SlowAsyncAccessInvoke([&done](ICaptureAccess *access) {
-       access->EmbedDependenciesIntoCapture();
-       done = true;
-     }))
+  if(!m_Replay.GetCaptureAccess())
     return;
 
+  // Always operate on the capture access (local or remote)
+  QString tag = lit("replayEmbedDependenciesIntoCapture");
+  bool done = false;
+
+  Replay().AsyncInvoke(tag, [this, &done](IReplayController *) {
+    m_Replay.GetCaptureAccess()->EmbedDependenciesIntoCapture();
+    done = true;
+  });
+
   // wait a short while before displaying the progress dialog
-  for(int i = 0; !done && i < 100; i++)
+  for(int i = 0; !done && (i < 100 || m_Replay.GetCurrentProcessingTag().isEmpty() ||
+                           m_Replay.GetCurrentProcessingTag() == tag);
+      i++)
     QThread::msleep(5);
 
   ShowProgressDialog(m_MainWindow->Widget(), tr("Please wait, working..."),
@@ -3170,16 +3164,22 @@ void CaptureContext::EmbedDependentFiles()
 
 void CaptureContext::RemoveDependentFiles()
 {
-  bool done = false;
-
-  if(!Replay().SlowAsyncAccessInvoke([&done](ICaptureAccess *access) {
-       access->RemoveDependenciesFromCapture();
-       done = true;
-     }))
+  if(!m_Replay.GetCaptureAccess())
     return;
 
+  // Always operate on the capture access (local or remote)
+  QString tag = lit("replayRemoveDependenciesFromCapture");
+  bool done = false;
+
+  Replay().AsyncInvoke(tag, [this, &done](IReplayController *) {
+    m_Replay.GetCaptureAccess()->RemoveDependenciesFromCapture();
+    done = true;
+  });
+
   // wait a short while before displaying the progress dialog
-  for(int i = 0; !done && i < 100; i++)
+  for(int i = 0; !done && (i < 100 || m_Replay.GetCurrentProcessingTag().isEmpty() ||
+                           m_Replay.GetCurrentProcessingTag() == tag);
+      i++)
     QThread::msleep(5);
 
   ShowProgressDialog(m_MainWindow->Widget(), tr("Please wait, working..."),

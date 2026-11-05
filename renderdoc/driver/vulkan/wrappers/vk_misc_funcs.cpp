@@ -2994,8 +2994,7 @@ VkResult WrappedVulkan::vkDebugMarkerSetObjectNameEXT(VkDevice device,
     if(ObjDisp(device)->DebugMarkerSetObjectNameEXT)
       ObjDisp(device)->DebugMarkerSetObjectNameEXT(Unwrap(device), &unwrapped);
 
-    VkResourceRecord *record = data.record;
-    if(record)
+    if(data.record)
     {
       CACHE_THREAD_SERIALISER();
 
@@ -3004,28 +3003,23 @@ VkResult WrappedVulkan::vkDebugMarkerSetObjectNameEXT(VkDevice device,
 
       Chunk *chunk = scope.Get();
 
-      // command buffer records clear their chunks in vkBeginCommandBuffer, so store the name in the
-      // persistent alloc record so we don't lose it
-      if(record->resType == eResCommandBuffer)
-        record = record->cmdInfo->allocRecord;
-
-      record->LockChunks();
-      while(record->HasChunks())
+      data.record->LockChunks();
+      while(data.record->HasChunks())
       {
-        Chunk *end = record->GetLastChunk();
+        Chunk *end = data.record->GetLastChunk();
 
         if(end->GetChunkType<VulkanChunk>() == VulkanChunk::vkDebugMarkerSetObjectNameEXT)
         {
           end->Delete();
-          record->PopChunk();
+          data.record->PopChunk();
           continue;
         }
 
         break;
       }
-      record->UnlockChunks();
+      data.record->UnlockChunks();
 
-      record->AddChunk(chunk);
+      data.record->AddChunk(chunk);
     }
   }
 
@@ -3138,8 +3132,7 @@ VkResult WrappedVulkan::vkSetDebugUtilsObjectNameEXT(VkDevice device,
     if(ObjDisp(device)->SetDebugUtilsObjectNameEXT)
       ObjDisp(device)->SetDebugUtilsObjectNameEXT(Unwrap(device), &unwrapped);
 
-    VkResourceRecord *record = data.record;
-    if(record)
+    if(data.record)
     {
       CACHE_THREAD_SERIALISER();
 
@@ -3148,28 +3141,23 @@ VkResult WrappedVulkan::vkSetDebugUtilsObjectNameEXT(VkDevice device,
 
       Chunk *chunk = scope.Get();
 
-      // command buffer records clear their chunks in vkBeginCommandBuffer, so store the name in the
-      // persistent alloc record so we don't lose it
-      if(record->resType == eResCommandBuffer)
-        record = record->cmdInfo->allocRecord;
-
-      record->LockChunks();
-      while(record->HasChunks())
+      data.record->LockChunks();
+      while(data.record->HasChunks())
       {
-        Chunk *end = record->GetLastChunk();
+        Chunk *end = data.record->GetLastChunk();
 
         if(end->GetChunkType<VulkanChunk>() == VulkanChunk::vkSetDebugUtilsObjectNameEXT)
         {
           end->Delete();
-          record->PopChunk();
+          data.record->PopChunk();
           continue;
         }
 
         break;
       }
-      record->UnlockChunks();
+      data.record->UnlockChunks();
 
-      record->AddChunk(chunk);
+      data.record->AddChunk(chunk);
     }
   }
 

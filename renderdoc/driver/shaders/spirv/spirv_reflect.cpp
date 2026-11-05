@@ -58,10 +58,7 @@ void FillSpecConstantVariables(ResourceId shader, const SPIRVPatchData &patchDat
   RDCASSERTEQUAL(invars.size(), outvars.size());
 
   for(size_t v = 0; v < invars.size() && v < outvars.size(); v++)
-  {
-    outvars[v].flags &= ~ShaderVariableFlags::Truncated;
     outvars[v].value.u64v[0] = invars[v].defaultValue;
-  }
 
   // find any actual values specified
   for(size_t i = 0; i < specInfo.size(); i++)
@@ -596,6 +593,11 @@ Reflector::Reflector()
 {
 }
 
+void Reflector::Parse(const rdcarray<uint32_t> &spirvWords)
+{
+  Processor::Parse(spirvWords);
+}
+
 void Reflector::PreParse(uint32_t maxId)
 {
   Processor::PreParse(maxId);
@@ -620,21 +622,8 @@ void Reflector::RegisterOp(Iter it)
     OpName name(it);
 
     // technically you could name a string - in that case we ignore the name
-    if(strings[name.target].empty() && !name.name.empty())
-    {
-      rdcstr nameStr = name.name;
-
-      int alias = 2;
-      while(usedNames.find(nameStr) != usedNames.end())
-      {
-        nameStr = name.name + "@" + ToStr(alias);
-        alias++;
-      }
-
-      usedNames.insert(nameStr);
-
-      strings[name.target] = nameStr;
-    }
+    if(strings[name.target].empty())
+      strings[name.target] = name.name;
   }
   else if(opdata.op == Op::MemberName)
   {
@@ -2627,7 +2616,7 @@ TEST_CASE("Validate SPIR-V reflection", "[spirv][reflection]")
     REQUIRE(!spirv.empty());
 
     rdcspv::Reflector spv;
-    spv.Parse(std::move(spirv));
+    spv.Parse(spirv);
 
     SPIRVPatchData patchData;
     spv.MakeReflection(type == ShaderType::Vulkan ? GraphicsAPI::Vulkan : GraphicsAPI::OpenGL,

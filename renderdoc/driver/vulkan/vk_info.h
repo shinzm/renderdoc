@@ -232,11 +232,12 @@ struct VulkanCreationInfo
     rdcarray<SpecConstant> specConstantData;
 
     void Init(VulkanResourceManager *resourceMan, const VulkanCreationInfo &info, ResourceId id,
-              const rdcstr &entry, VkShaderStageFlagBits stage,
+              const rdcspv::Reflector &spv, const rdcstr &entry, VkShaderStageFlagBits stage,
               const rdcarray<SpecConstant> &specInfo);
 
     void PopulateDisassembly(const rdcspv::Reflector &spirv);
-    void Reload(VulkanResourceManager *resourceMan, const VulkanCreationInfo &info, ResourceId id);
+    void Reload(VulkanResourceManager *resourceMan, const VulkanCreationInfo &info, ResourceId id,
+                const rdcspv::Reflector &spv);
   };
 
   struct ShaderEntry
@@ -807,13 +808,10 @@ struct VulkanCreationInfo
     }
 
     rdcspv::Reflector spirv;
+    // Only set when separate debug spirv is found
+    rdcarray<uint32_t> initialSpirv;
 
     rdcstr unstrippedPath;
-
-    // indicate if we've ever found a debug blob, so that if we fail to on a second retry we don't
-    // overwrite the loading log from the successful load with anything but a successful load
-    bool debugBlobEverFound = false;
-
     rdcstr debugInfoLoadingLog;
 
     std::map<ShaderModuleReflectionKey, ShaderModuleReflection> m_Reflections;
@@ -854,14 +852,11 @@ struct VulkanCreationInfo
   {
     void Init(VulkanResourceManager *resourceMan, VulkanCreationInfo &info,
               const VkAccelerationStructureCreateInfoKHR *pCreateInfo);
-    void Init(VulkanResourceManager *resourceMan, WrappedVulkan *vk, VulkanCreationInfo &info,
-              const VkAccelerationStructureCreateInfo2KHR *pCreateInfo);
 
     ResourceId buffer;
     uint64_t offset;
     uint64_t size;
     VkAccelerationStructureTypeKHR type;
-    VkDeviceAddress address;
   };
   std::unordered_map<ResourceId, AccelerationStructure> m_AccelerationStructure;
 

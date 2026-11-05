@@ -111,8 +111,7 @@ class Reflector : public Processor
 {
 public:
   Reflector();
-
-  using Processor::Parse;
+  virtual void Parse(const rdcarray<uint32_t> &spirvWords);
 
   rdcstr Disassemble(const rdcstr &entryPoint, const rdcarray<SpecConstant> &specInfo,
                      std::map<size_t, uint32_t> &instructionLines) const;
@@ -156,7 +155,6 @@ private:
                              const rdcarray<SpecConstant> &specInfo) const;
 
   rdcstr cmdline;
-  std::set<rdcstr> usedNames;
   DenseIdMap<rdcstr> strings;
   SourceLanguage sourceLanguage = SourceLanguage::Unknown;
   rdcarray<SourceFile> sources;

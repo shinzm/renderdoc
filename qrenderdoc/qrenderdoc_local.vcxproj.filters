@@ -741,6 +741,24 @@
     <ClCompile Include="Code\BufferFormatter.cpp">
       <Filter>Code</Filter>
     </ClCompile>
+    <ClCompile Include="Code\MeshExport.cpp">
+      <Filter>Code</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\TextureBatchExport.cpp">
+      <Filter>Code</Filter>
+    </ClCompile>
+    <ClInclude Include="Code\TextureBatchExport.h">
+      <Filter>Code</Filter>
+    </ClInclude>
+    <ClCompile Include="Code\MeshBatchExport.cpp">
+      <Filter>Code</Filter>
+    </ClCompile>
+    <ClInclude Include="Code\MeshData.h">
+      <Filter>Code</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\MeshExport.h">
+      <Filter>Code</Filter>
+    </ClInclude>
     <ClCompile Include="$(IntDir)generated\moc_ConfigEditor.cpp">
       <Filter>Generated Files</Filter>
     </ClCompile>
@@ -800,12 +818,6 @@
     </ClCompile>
     <ClCompile Include="Code\Interface\Helpers.cpp">
       <Filter>Code\Interface</Filter>
-    </ClCompile>
-    <ClCompile Include="$(IntDir)generated\moc_PixelDebugSelector.cpp">
-      <Filter>Generated Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Widgets\PixelDebugSelector.cpp">
-      <Filter>Widgets</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1195,9 +1207,6 @@
     </ClInclude>
     <ClInclude Include="Code\Interface\Helpers.h">
       <Filter>Code\Interface</Filter>
-    </ClInclude>
-    <ClInclude Include="$(IntDir)generated\ui_PixelDebugSelector.h">
-      <Filter>Generated Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -1642,12 +1651,6 @@
     </CustomBuild>
     <CustomBuild Include="Widgets\Extended\RDToolTip.h">
       <Filter>Widgets\Extended</Filter>
-    </CustomBuild>
-    <CustomBuild Include="Widgets\PixelDebugSelector.ui">
-      <Filter>Widgets</Filter>
-    </CustomBuild>
-    <CustomBuild Include="Widgets\PixelDebugSelector.h">
-      <Filter>Widgets</Filter>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>

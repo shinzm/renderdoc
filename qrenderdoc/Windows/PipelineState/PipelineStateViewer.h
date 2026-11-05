@@ -36,9 +36,6 @@ class PipelineStateViewer;
 
 class QXmlStreamWriter;
 
-class ComputeDebugSelector;
-class PixelDebugSelector;
-
 class QToolButton;
 class QMenu;
 class RDLabel;
@@ -118,8 +115,6 @@ public:
 
   void SetupResourceView(RDTreeWidget *view);
 
-  void SetupDebugSelectors(QToolButton *computeSelector, QToolButton *pixelSelector);
-
   QString GetVBufferFormatString(uint32_t slot);
 
   QColor GetViewDetailsColor();
@@ -139,22 +134,11 @@ public:
 public slots:
   void shaderEdit_clicked();
 
-  void computeDebugSelector_clicked();
-  void computeDebugSelector_beginDebug(const rdcfixedarray<uint32_t, 3> &group,
-                                       const rdcfixedarray<uint32_t, 3> &thread);
-
-  void pixelDebugSelector_clicked();
-  void pixelDebugSelector_beginDebug(uint32_t x, uint32_t y, const DebugPixelInputs &inputs);
-
-
 private:
   void showEvent(QShowEvent *event) override;
 
   Ui::PipelineStateViewer *ui;
   ICaptureContext &m_Ctx;
-
-  ComputeDebugSelector *m_ComputeDebugSelector;
-  PixelDebugSelector *m_PixelDebugSelector;
 
   QMenu *editMenus[NumShaderStages] = {};
 

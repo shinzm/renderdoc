@@ -482,7 +482,7 @@ const ShaderReflection *VulkanReplay::GetShader(ResourceId pipeline, ResourceId 
   // if this shader was never used in a pipeline the reflection won't be prepared. Do that now -
   // this will be ignored if it was already prepared.
   shad->second.GetReflection(entry.stage, entry.name, pipeline)
-      .Init(GetResourceManager(), m_pDriver->m_CreationInfo, shader, entry.name,
+      .Init(GetResourceManager(), m_pDriver->m_CreationInfo, shader, shad->second.spirv, entry.name,
             VkShaderStageFlagBits(1 << uint32_t(entry.stage)), {});
 
   return shad->second.GetReflection(entry.stage, entry.name, pipeline).refl;
@@ -3547,14 +3547,6 @@ bool VulkanReplay::GetMinMax(ResourceId texid, const Subresource &sub, CompType 
   if(!IsStencilFormat(iminfo.format))
     stencil = false;
 
-  if(Is64BitFormat(iminfo.format) && (IsUIntFormat(iminfo.format) || IsSIntFormat(iminfo.format)))
-  {
-    // 64-bit integer images can't be sampled or accurately displayed.
-    memset(minval, 0, sizeof(float) * 4);
-    memset(maxval, 0, sizeof(float) * 4);
-    return true;
-  }
-
   CreateTexImageView(liveIm, iminfo, typeCast, texviews);
 
   VkImageView liveImView = texviews.views[0];
@@ -3868,14 +3860,6 @@ bool VulkanReplay::GetHistogram(ResourceId texid, const Subresource &sub, CompTy
   // detect if stencil is selected
   if(IsStencilFormat(iminfo.format) && !channels[0] && channels[1] && !channels[2] && !channels[3])
     stencil = true;
-
-  if(Is64BitFormat(iminfo.format) && (IsUIntFormat(iminfo.format) || IsSIntFormat(iminfo.format)))
-  {
-    // 64-bit integer images can't be sampled or accurately displayed.
-    histogram.clear();
-    histogram.resize(HGRAM_NUM_BUCKETS);
-    return true;
-  }
 
   CreateTexImageView(liveIm, iminfo, typeCast, texviews);
 
@@ -5209,8 +5193,8 @@ ResourceId VulkanReplay::ApplyCustomShader(TextureDisplay &display)
   disp.linearDisplayAsGamma = false;
   disp.subresource = display.subresource;
   disp.overlay = DebugOverlay::NoOverlay;
-  disp.rangeMin = display.rangeMin;
-  disp.rangeMax = display.rangeMax;
+  disp.rangeMin = 0.0f;
+  disp.rangeMax = 1.0f;
   disp.rawOutput = false;
   disp.scale = 1.0f;
 

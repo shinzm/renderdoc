@@ -13,7 +13,7 @@ class Repeat_Load(rdtest.TestCase):
             rdtest.log.print(f"Loading for iteration {i + 1}")
 
             try:
-                cap, controller = rdtest.open_capture(path)
+                controller = rdtest.open_capture(path)
             except RuntimeError as err:
                 rdtest.log.print(f"Skipping. Can't open {path}: {err}")
                 return
@@ -31,8 +31,6 @@ class Repeat_Load(rdtest.TestCase):
                 memory_baseline = memory_usage
 
             controller.Shutdown()
-            if cap is not None:
-                cap.Shutdown()
 
             pct_over = 'N/A'
 

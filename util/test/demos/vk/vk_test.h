@@ -194,13 +194,6 @@ struct VulkanGraphicsTest : public GraphicsTest
 {
   static const TestAPI API = TestAPI::Vulkan;
 
-  enum CompileOptionFlags
-  {
-    None = 0,
-    SeparateDebug = 1 << 0,
-    RelativeDebugName = 1 << 1,
-  };
-
   VulkanGraphicsTest();
 
   void Prepare(int argc, char **argv);
@@ -229,7 +222,7 @@ struct VulkanGraphicsTest : public GraphicsTest
   VkPipelineShaderStageCreateInfo CompileShaderModule(
       const std::string &source_text, ShaderLang lang, ShaderStage stage,
       const char *entry_point = "main", const std::map<std::string, std::string> &macros = {},
-      SPIRVTarget target = SPIRVTarget::vulkan, uint32_t compileOptions = CompileOptionFlags::None);
+      SPIRVTarget target = SPIRVTarget::vulkan);
   VkCommandBuffer GetCommandBuffer(VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                                    VulkanWindow *window = NULL);
 

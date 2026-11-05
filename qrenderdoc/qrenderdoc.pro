@@ -15,6 +15,17 @@ equals(QT_MAJOR_VERSION, 5): lessThan(QT_MINOR_VERSION, 6): error("requires Qt 5
 TARGET = qrenderdoc
 TEMPLATE = app
 
+# Optional Autodesk FBX SDK. Explicit library flags support SDK/platform variations.
+FBXSDK_ROOT = $$(FBXSDK_ROOT)
+!isEmpty(FBXSDK_ROOT) {
+    !exists($$FBXSDK_ROOT/include/fbxsdk.h): error("FBXSDK_ROOT must contain include/fbxsdk.h")
+    FBXSDK_LIBS = $$(FBXSDK_LIBS)
+    isEmpty(FBXSDK_LIBS): error("Set FBXSDK_LIBS to the SDK and its dependency linker flags")
+    INCLUDEPATH += $$quote($$FBXSDK_ROOT/include)
+    DEFINES += RENDERDOC_FBX_SDK
+    LIBS += $$FBXSDK_LIBS
+}
+
 # include path for core renderdoc API
 INCLUDEPATH += $$_PRO_FILE_PWD_/../renderdoc/api/replay
 
@@ -174,6 +185,9 @@ SOURCES += Code/qrenderdoc.cpp \
     Code/QRDUtils.cpp \
     Code/MiniQtHelper.cpp \
     Code/BufferFormatter.cpp \
+    Code/MeshExport.cpp \
+    Code/MeshBatchExport.cpp \
+    Code/TextureBatchExport.cpp \
     Code/Resources.cpp \
     Code/RGPInterop.cpp \
     Code/pyrenderdoc/PythonContext.cpp \
@@ -205,7 +219,6 @@ SOURCES += Code/qrenderdoc.cpp \
     Widgets/Extended/RDDoubleSpinBox.cpp \
     Widgets/Extended/RDListView.cpp \
     Widgets/ComputeDebugSelector.cpp \
-    Widgets/PixelDebugSelector.cpp \
     Widgets/CustomPaintWidget.cpp \
     Widgets/ResourcePreview.cpp \
     Widgets/ThumbnailStrip.cpp \
@@ -260,6 +273,7 @@ SOURCES += Code/qrenderdoc.cpp \
     Windows/Dialogs/CameraControlsDialog.cpp \
     Windows/Dialogs/ProjectionGuessDialog.cpp
 HEADERS += Code/CaptureContext.h \
+    Code/TextureBatchExport.h \
     Code/qprocessinfo.h \
     Code/ReplayManager.h \
     Code/ScintillaSyntax.h \
@@ -297,7 +311,6 @@ HEADERS += Code/CaptureContext.h \
     Widgets/Extended/RDDoubleSpinBox.h \
     Widgets/Extended/RDListView.h \
     Widgets/ComputeDebugSelector.h \
-    Widgets/PixelDebugSelector.h \
     Widgets/CustomPaintWidget.h \
     Widgets/ResourcePreview.h \
     Widgets/ThumbnailStrip.h \
@@ -371,7 +384,6 @@ FORMS    += Windows/Dialogs/AboutDialog.ui \
     Windows/PipelineState/GLPipelineStateViewer.ui \
     Widgets/BufferFormatSpecifier.ui \
     Widgets/ComputeDebugSelector.ui \
-    Widgets/PixelDebugSelector.ui \
     Windows/BufferViewer.ui \
     Windows/ShaderViewer.ui \
     Windows/ShaderMessageViewer.ui \

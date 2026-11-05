@@ -33,7 +33,6 @@
 class RDTreeView;
 
 typedef QSet<uint> RDTreeViewExpansionState;
-typedef QList<uint> RDTreeViewSelectedItemState;
 
 class RDTreeViewDelegate : public RichTextViewDelegate
 {
@@ -129,9 +128,6 @@ public:
       return qHash(idx.sibling(idx.row(), keyColumn).data(keyRole).toString(), seed);
     });
   }
-
-  RDTreeViewSelectedItemState saveSelectedItemState();
-  void applySelectedItemState(RDTreeViewSelectedItemState state);
 
   // Internally tracked expansions
   RDTreeViewExpansionState &getInternalExpansion(uint expansionID)

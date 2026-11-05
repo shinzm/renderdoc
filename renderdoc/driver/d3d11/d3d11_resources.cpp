@@ -159,23 +159,16 @@ void WrappedShader::ReloadShaderDebugInformation()
 
 void WrappedShader::ShaderEntry::Reload()
 {
-  bool wasBuilt = m_Built;
   m_Built = false;
   *m_Details = ShaderReflection();
   m_Access.clear();
-
-  if(m_DXBCFile)
+  if(m_Bytecode.empty() && m_DXBCFile)
   {
-    // recreate the DXBC file, this will pull any old debug info over
-    m_DXBCFile = new DXBC::DXBCContainer(m_DXBCFile, m_DebugInfoPath);
-    m_DXBCFile->SetShaderExts(GraphicsAPI::D3D11, m_ShaderExtSlot, ~0U);
+    m_Bytecode = m_DXBCFile->GetInitialShaderBlob();
+    if(m_Bytecode.empty())
+      m_Bytecode = m_DXBCFile->GetShaderBlob();
   }
-
-  if(wasBuilt)
-  {
-    BuildReflection();
-    m_Built = true;
-  }
+  SAFE_DELETE(m_DXBCFile);
 }
 
 UINT GetSubresourceCount(ID3D11Resource *res)

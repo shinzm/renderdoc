@@ -597,6 +597,11 @@ public:
   void AddDeviceFrameCapturer(void *dev, IFrameCapturer *cap);
   void RemoveDeviceFrameCapturer(void *dev);
 
+  // Vulkan can have multiple instances rendering the same application frame.
+  void AddVulkanBridgeCapturer(IFrameCapturer *cap);
+  void RemoveVulkanBridgeCapturer(IFrameCapturer *cap);
+  rdcarray<IFrameCapturer *> GetVulkanBridgeCapturers();
+
   IFrameCapturer *MatchFrameCapturer(DeviceOwnedWindow devWnd);
 
   void StartFrameCapture(DeviceOwnedWindow devWnd);
@@ -738,7 +743,6 @@ private:
   VulkanLayerCheck m_VulkanCheck;
   VulkanLayerInstall m_VulkanInstall;
 
-  Threading::CriticalSection m_ShutdownLock;
   rdcarray<ShutdownFunction> m_ShutdownFunctions;
   rdcarray<EnvSetupFunction> m_EnvSetups;
 
@@ -759,6 +763,7 @@ private:
   std::map<DeviceOwnedWindow, FrameCap> m_WindowFrameCapturers;
   DeviceOwnedWindow m_ActiveWindow;
   std::map<void *, IFrameCapturer *> m_DeviceFrameCapturers;
+  rdcarray<IFrameCapturer *> m_VulkanBridgeCapturers;
 
   bool m_VendorExts[arraydim<VendorExtensions>()] = {};
 

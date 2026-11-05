@@ -24,10 +24,7 @@
 
 #include "glsl_globals.h"
 
-#ifdef VULKAN
-layout(location = 0)
-#endif
-    out vec4 v2f_uvwa;
+layout(location = 0) out vec4 uvwa;
 
 #ifdef VULKAN
 
@@ -62,9 +59,9 @@ void main(void)
 #endif
 
   gl_Position = verts[VERTEX_ID];
-  v2f_uvwa = in_uvwa;
+  uvwa = in_uvwa;
   if(VERTEX_ID == 1)
-    v2f_uvwa.xyz += in_ddx.xyz;
+    uvwa.xyz += in_ddx.xyz;
   else if(VERTEX_ID == 2)
-    v2f_uvwa.xyz += in_ddy.xyz;
+    uvwa.xyz += in_ddy.xyz;
 }

@@ -95,7 +95,7 @@
       <PreprocessorDefinitions>_WINDOWS;UNICODE;WIN32;WIN64;RENDERDOC_PLATFORM_WIN32;SCINTILLA_QT=1;MAKING_LIBRARY=1;SCI_LEXER=1;QT_NO_CAST_FROM_ASCII;QT_NO_CAST_TO_ASCII;QT_WIDGETS_LIB;QT_GUI_LIB;QT_CORE_LIB;QT_SVG_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <DisableSpecificWarnings>4100;4127;4189;4714;4718;4996;5240;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4100;4127;4189;4714;4718;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>precompiled.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>precompiled.h</ForcedIncludeFiles>
@@ -577,6 +577,12 @@
       </ForcedIncludeFiles>
     </ClCompile>
     <ClCompile Include="Code\BufferFormatter.cpp" />
+    <ClCompile Include="Code\MeshExport.cpp" />
+    <ClCompile Include="Code\MeshBatchExport.cpp" />
+    <ClCompile Include="Code\TextureBatchExport.cpp" />
+    <ClInclude Include="Code\TextureBatchExport.h" />
+    <ClInclude Include="Code\MeshData.h" />
+    <ClInclude Include="Code\MeshExport.h" />
     <ClCompile Include="Code\Interface\Analytics.cpp" />
     <ClCompile Include="Code\Interface\Helpers.cpp" />
     <ClCompile Include="Code\Interface\PersistentConfig.cpp" />
@@ -610,7 +616,6 @@
     <ClCompile Include="$(IntDir)generated\moc_ResourceInspector.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_BufferFormatSpecifier.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_ComputeDebugSelector.cpp" />
-    <ClCompile Include="$(IntDir)generated\moc_PixelDebugSelector.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_FindReplace.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_BufferViewer.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_CaptureDialog.cpp" />
@@ -710,7 +715,6 @@
     <ClCompile Include="Widgets\BufferFormatSpecifier.cpp" />
     <ClCompile Include="Widgets\CollapseGroupBox.cpp" />
     <ClCompile Include="Widgets\ComputeDebugSelector.cpp" />
-    <ClCompile Include="Widgets\PixelDebugSelector.cpp" />
     <ClCompile Include="Widgets\FindReplace.cpp" />
     <ClCompile Include="Widgets\Extended\RDListWidget.cpp" />
     <ClCompile Include="Widgets\Extended\RDTableView.cpp" />
@@ -964,7 +968,6 @@
     <ClInclude Include="$(IntDir)generated\ui_ResourceInspector.h" />
     <ClInclude Include="$(IntDir)generated\ui_BufferFormatSpecifier.h" />
     <ClInclude Include="$(IntDir)generated\ui_ComputeDebugSelector.h" />
-    <ClInclude Include="$(IntDir)generated\ui_PixelDebugSelector.h" />
     <ClInclude Include="$(IntDir)generated\ui_FindReplace.h" />
     <ClInclude Include="$(IntDir)generated\ui_BufferViewer.h" />
     <ClInclude Include="$(IntDir)generated\ui_CaptureDialog.h" />
@@ -1038,12 +1041,6 @@
       <Outputs>$(IntDir)generated\moc_%(Filename).cpp</Outputs>
     </CustomBuild>
     <CustomBuild Include="Widgets\ComputeDebugSelector.h">
-      <AdditionalInputs>%(Fullpath);$(QtBinDir)\moc.exe;%(AdditionalInputs)</AdditionalInputs>
-      <Command>"$(QtBinDir)\moc.exe" -DUNICODE -DWIN32 -DWIN64 -D_WIN32 -D_WIN64 -DRENDERDOC_PLATFORM_WIN32 -DSCINTILLA_QT=1 -DSCI_LEXER=1 -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_CORE_LIB -D_MSC_VER=1900 -I"$(ProjectDir)." -I"$(SolutionDir)\renderdoc\api\replay" -I"$(QtIncludeDir)" -I"$(QtIncludeDir)\QtWidgets" -I"$(QtIncludeDir)\QtGui" -I"$(QtIncludeDir)\QtCore" "%(Fullpath)" -o "$(IntDir)generated\moc_%(Filename).cpp"</Command>
-      <Message>MOC %(Filename).h</Message>
-      <Outputs>$(IntDir)generated\moc_%(Filename).cpp</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="Widgets\PixelDebugSelector.h">
       <AdditionalInputs>%(Fullpath);$(QtBinDir)\moc.exe;%(AdditionalInputs)</AdditionalInputs>
       <Command>"$(QtBinDir)\moc.exe" -DUNICODE -DWIN32 -DWIN64 -D_WIN32 -D_WIN64 -DRENDERDOC_PLATFORM_WIN32 -DSCINTILLA_QT=1 -DSCI_LEXER=1 -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_CORE_LIB -D_MSC_VER=1900 -I"$(ProjectDir)." -I"$(SolutionDir)\renderdoc\api\replay" -I"$(QtIncludeDir)" -I"$(QtIncludeDir)\QtWidgets" -I"$(QtIncludeDir)\QtGui" -I"$(QtIncludeDir)\QtCore" "%(Fullpath)" -o "$(IntDir)generated\moc_%(Filename).cpp"</Command>
       <Message>MOC %(Filename).h</Message>
@@ -1495,12 +1492,6 @@
       <Outputs>$(IntDir)generated\ui_%(Filename).h</Outputs>
     </CustomBuild>
     <CustomBuild Include="Widgets\ComputeDebugSelector.ui">
-      <AdditionalInputs>%(Fullpath);$(QtBinDir)\uic.exe;%(AdditionalInputs)</AdditionalInputs>
-      <Command>"$(QtBinDir)\uic.exe" "%(Fullpath)" -o "$(IntDir)generated\ui_%(Filename).h"</Command>
-      <Message>UIC %(Filename).ui</Message>
-      <Outputs>$(IntDir)generated\ui_%(Filename).h</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="Widgets\PixelDebugSelector.ui">
       <AdditionalInputs>%(Fullpath);$(QtBinDir)\uic.exe;%(AdditionalInputs)</AdditionalInputs>
       <Command>"$(QtBinDir)\uic.exe" "%(Fullpath)" -o "$(IntDir)generated\ui_%(Filename).h"</Command>
       <Message>UIC %(Filename).ui</Message>
@@ -2203,4 +2194,5 @@
     </PropertyPageSchema>
   </ItemGroup>
   <Import Project="custom_qt.props" />
+  <Import Project="fbx.props" />
 </Project>

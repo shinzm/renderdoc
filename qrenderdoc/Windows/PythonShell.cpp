@@ -379,7 +379,8 @@ PythonShell::PythonShell(ICaptureContext &ctx, QWidget *parent)
   QObject::connect(m_Watcher, &QFileSystemWatcher::directoryChanged, this,
                    &PythonShell::updateExtensionProjects);
 
-  QObject::connect(PythonContext::GetExtensionContext(), &PythonContext::extensionsUpdated, [this]() {
+  QTimer *pyStatusTimer = new QTimer(this);
+  QObject::connect(pyStatusTimer, &QTimer::timeout, [this]() {
     QList<QString> curModExts;
 
     for(const ExtensionMetadata &m : m_Ctx.Extensions().GetInstalledExtensions())
@@ -397,10 +398,7 @@ PythonShell::PythonShell(ICaptureContext &ctx, QWidget *parent)
       updateExtensionProjects();
       m_ModifiedExtensions = curModExts;
     }
-  });
 
-  QTimer *pyStatusTimer = new QTimer(this);
-  QObject::connect(pyStatusTimer, &QTimer::timeout, [this]() {
     bool hasDebugger = PythonContext::IsDebuggerConnected();
 
     if(m_DebuggerAttached != hasDebugger)
@@ -1051,8 +1049,6 @@ void PythonShell::updateNonDebugWarning()
         edit->setWarning(
             tr("External debugger will not work for unsaved files. "
                "Save script to disk to allow debugging."));
-      else
-        edit->setWarning(QString());
     }
     else
     {
@@ -1937,9 +1933,6 @@ void PythonShell::projectExplorer_contextMenu(const QPoint &pos)
   QAction createExtension(tr("Create &New Extension"), this);
   createExtension.setIcon(Icons::plugin_add());
 
-  QAction refreshExtensionList(tr("&Refresh Extension List"), this);
-  refreshExtensionList.setIcon(Icons::update());
-
   QObject::connect(&expandAll, &QAction::triggered,
                    [this, item]() { ui->projectExplorer->expandAllItems(item); });
 
@@ -2026,11 +2019,8 @@ void PythonShell::projectExplorer_contextMenu(const QPoint &pos)
     contextMenu.addSeparator();
 
     contextMenu.addAction(&createExtension);
-    contextMenu.addAction(&refreshExtensionList);
 
     QObject::connect(&createExtension, &QAction::triggered, [this]() { createExtension_clicked(); });
-    QObject::connect(&refreshExtensionList, &QAction::triggered,
-                     [this]() { updateExtensionProjects(); });
   }
 
   RDDialog::show(&contextMenu, ui->projectExplorer->viewport()->mapToGlobal(pos));

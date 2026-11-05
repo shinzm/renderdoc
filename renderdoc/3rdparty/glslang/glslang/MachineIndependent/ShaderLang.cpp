@@ -85,7 +85,7 @@ int NumberOfClients = 0;
 #ifndef DISABLE_THREAD_SUPPORT
 std::mutex &init_lock()
 {
-  static std::mutex *lock = new std::mutex;
+  std::mutex *lock = new std::mutex;
   return *lock;
 }
 #endif

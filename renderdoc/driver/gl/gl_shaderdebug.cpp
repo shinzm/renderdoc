@@ -164,7 +164,6 @@ public:
     CHECK_DEVICE_THREAD();
     if(!m_ResourcesDirty)
     {
-      m_pDriver->GetReplay()->UseReplayContext();
       GLMarkerRegion region("ResetReplay");
       // replay the action to get back to 'normal' state for this event, and mark that we need to
       // replay back to pristine state next time we need to fetch data.
@@ -685,6 +684,8 @@ public:
       return false;
     }
 
+    GLMarkerRegion markerRegion("QueueSampleGather");
+
     GLResource texture = m_pDriver->GetResourceManager()->GetResource(imageDescriptor.resource);
     GLResource bufTexture =
         m_pDriver->GetResourceManager()->GetResource(bufferViewDescriptor.resource);
@@ -1154,8 +1155,6 @@ public:
         uniformParams.dynoffset.z = offset.value.s32v[2];
     }
 
-    m_pDriver->GetReplay()->UseReplayContext();
-
     GLuint prog = m_pDriver->GetReplay()->MakeShaderDebugSampleProg(config);
 
     if(prog == 0)
@@ -1166,7 +1165,7 @@ public:
       return false;
     }
 
-    GLMarkerRegion markerRegion("QueueSampleGather");
+    m_pDriver->GetReplay()->UseReplayContext();
 
     GLRenderState rs;
     rs.FetchState(m_pDriver);
@@ -1288,9 +1287,9 @@ public:
 
     RDCASSERTEQUAL(params[0].type, VarType::Float);
 
-    m_pDriver->GetReplay()->UseDebugContext();
-
     GLMarkerRegion markerRegion("QueueCalculateMathOp");
+
+    m_pDriver->GetReplay()->UseReplayContext();
 
     GLRenderState rs;
     rs.FetchState(m_pDriver);
@@ -1381,9 +1380,6 @@ public:
   {
     CHECK_DEVICE_THREAD();
 
-    GLuint oldbuf = 0;
-    GL.glGetIntegerv(eGL_COPY_READ_BUFFER_BINDING, (GLint *)&oldbuf);
-
     bytebuf gpuResults;
     gpuResults.resize(m_MathBufferSize + m_SampleBufferSize);
     if(m_MathBuffer)
@@ -1437,8 +1433,6 @@ public:
       }
       gpuSampleGatherOpResults += sampleGatherOpResultByteSize;
     }
-
-    GL.glBindBuffer(eGL_COPY_READ_BUFFER, oldbuf);
 
     return true;
   }
@@ -1729,7 +1723,6 @@ private:
       // before it.
       if(m_ResourcesDirty)
       {
-        m_pDriver->GetReplay()->UseReplayContext();
         GLMarkerRegion region("un-dirtying resources");
         m_pDriver->GetReplay()->ReplayLog(m_EventID, eReplay_WithoutDraw);
         m_ResourcesDirty = false;
@@ -1763,7 +1756,6 @@ private:
       // before it.
       if(m_ResourcesDirty)
       {
-        m_pDriver->GetReplay()->UseReplayContext();
         GLMarkerRegion region("un-dirtying resources");
         m_pDriver->GetReplay()->ReplayLog(m_EventID, eReplay_WithoutDraw);
         m_ResourcesDirty = false;
@@ -4302,16 +4294,12 @@ rdcarray<ShaderDebugState> GLReplay::ContinueDebug(ShaderDebugger *debugger)
   if(!spvDebugger)
     return {};
 
-  m_pDriver->GetReplay()->UseReplayContext();
-
   GLMarkerRegion region("ContinueDebug Simulation Loop");
 
   rdcarray<ShaderDebugState> ret = spvDebugger->ContinueDebug();
 
   GLAPIWrapper *api = (GLAPIWrapper *)spvDebugger->GetAPIWrapper();
   api->ResetReplay();
-
-  m_pDriver->GetReplay()->UseReplayContext();
 
   return ret;
 }

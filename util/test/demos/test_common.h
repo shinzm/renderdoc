@@ -83,12 +83,12 @@ enum class ShaderStage
   task,
 };
 
+bool InternalSpvCompiler();
 bool SpvCompilationSupported();
 std::vector<uint32_t> CompileShaderToSpv(const char *demo_name, const std::string &source_text,
                                          SPIRVTarget target, ShaderLang lang, ShaderStage stage,
                                          const char *entry_point,
-                                         const std::map<std::string, std::string> &macros = {},
-                                         bool debug_info = true);
+                                         const std::map<std::string, std::string> &macros = {});
 
 struct Vec2f
 {
@@ -224,8 +224,6 @@ struct GraphicsTest
   bool headless = false;
 
   RENDERDOC_API_1_7_0 *rdoc = NULL;
-
-  std::string tmpPath;
 
   // shared parameters
   static int maxFrameCount;

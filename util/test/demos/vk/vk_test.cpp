@@ -406,9 +406,9 @@ void VulkanGraphicsTest::Prepare(int argc, char **argv)
   if(!volk)
     Avail = "volk did not initialise - vulkan library is not available";
   else if(!spv)
-    Avail =
-        "Couldn't find 'glslc' or 'glslangValidator' in PATH - "
-        "required for SPIR-V compilation";
+    Avail = InternalSpvCompiler() ? "Internal SPIR-V compiler did not initialise"
+                                  : "Couldn't find 'glslc' or 'glslangValidator' in PATH - "
+                                    "required for SPIR-V compilation";
   else if(instance == VK_NULL_HANDLE)
     Avail = "Vulkan instance did not initialise";
   else if(phys == VK_NULL_HANDLE)
@@ -744,7 +744,7 @@ bool VulkanGraphicsTest::Init()
 
   if(!headless)
   {
-    mainWindow = MakeWindow(screenWidth, screenHeight, screenTitle);
+    mainWindow = MakeWindow(screenWidth, screenHeight, "Autotesting");
 
     if(!mainWindow->Initialised())
     {
@@ -1009,12 +1009,9 @@ VkPipelineShaderStageCreateInfo VulkanGraphicsTest::LoadShaderModule(const std::
 
 VkPipelineShaderStageCreateInfo VulkanGraphicsTest::CompileShaderModule(
     const std::string &source_text, ShaderLang lang, ShaderStage stage, const char *entry_point,
-    const std::map<std::string, std::string> &macros, SPIRVTarget target, uint32_t compileOptions)
+    const std::map<std::string, std::string> &macros, SPIRVTarget target)
 {
   VkShaderModule ret = VK_NULL_HANDLE;
-
-  const bool separateDebug = ((compileOptions & CompileOptionFlags::SeparateDebug) != 0);
-  const bool relativeDebugName = ((compileOptions & CompileOptionFlags::RelativeDebugName) != 0);
 
   std::vector<uint32_t> spirv =
       ::CompileShaderToSpv(demoName, source_text, target, lang, stage, entry_point, macros);
@@ -1022,49 +1019,7 @@ VkPipelineShaderStageCreateInfo VulkanGraphicsTest::CompileShaderModule(
   if(spirv.empty())
     return {};
 
-  std::string path;
-  if(separateDebug)
-  {
-    path = tmpPath + "/";
-
-    std::string filenames[] = {
-        "shader_vs.dbg", "shader_hs.dbg", "shader_ds.dbg", "shader_gs.dbg",
-        "shader_ps.dbg", "shader_cs.dbg", "shader_ms.dbg", "shader_as.dbg",
-    };
-
-    path += filenames[(int)stage];
-
-    FILE *f = fopen(path.c_str(), "wb");
-    if(f)
-    {
-      fwrite(spirv.data(), 1, spirv.size() * sizeof(uint32_t), f);
-      fclose(f);
-    }
-
-    spirv =
-        ::CompileShaderToSpv(demoName, source_text, target, lang, stage, entry_point, macros, false);
-  }
-
   CHECK_VKR(vkCreateShaderModule(device, vkh::ShaderModuleCreateInfo(spirv), NULL, &ret));
-
-  if(relativeDebugName)
-  {
-    path.erase(0, path.find_last_of("/\\") + 1);
-    // keep the demo name so we don't have to set up tons of search paths
-    path = std::string(demoName) + "/" + path;
-  }
-
-  if(vkSetDebugUtilsObjectTagEXT && !path.empty())
-  {
-    VkDebugUtilsObjectTagInfoEXT info = {};
-    info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_TAG_INFO_EXT;
-    info.objectType = VK_OBJECT_TYPE_SHADER_MODULE;
-    info.objectHandle = (uint64_t)ret;
-    info.pTag = path.c_str();
-    info.tagSize = path.size();
-    info.tagName = RENDERDOC_ShaderDebugMagicValue_truncated;
-    vkSetDebugUtilsObjectTagEXT(device, &info);
-  }
 
   shaders.push_back(ret);
 

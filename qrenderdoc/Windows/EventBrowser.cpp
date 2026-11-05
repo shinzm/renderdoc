@@ -23,6 +23,8 @@
  ******************************************************************************/
 
 #include "EventBrowser.h"
+#include "Code/MeshExport.h"
+#include "Code/TextureBatchExport.h"
 #include <QAbstractItemModel>
 #include <QAbstractSpinBox>
 #include <QComboBox>
@@ -3835,13 +3837,13 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
   connect(m_FilterTimeout, &QTimer::timeout, this, &EventBrowser::filter_apply);
 
   QObject::connect(ui->events, &RDTreeView::keyPress, this, &EventBrowser::events_keyPress);
+  ui->events->setSelectionMode(QAbstractItemView::ExtendedSelection);
   QObject::connect(ui->events->selectionModel(), &QItemSelectionModel::currentChanged, this,
                    &EventBrowser::events_currentChanged);
   ui->find->setChecked(false);
   ui->bookmarkStrip->hide();
 
   m_BookmarkStripLayout = new FlowLayout(ui->bookmarkStrip, 0, 3, 3);
-  m_BookmarkStripLayout->setContentsMargins(6, 0, 6, 2);
   m_BookmarkSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
 
   ui->bookmarkStrip->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
@@ -3850,9 +3852,9 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
 
   {
     QHBoxLayout *box = new QHBoxLayout(ui->breadcrumbStrip);
+    box->setContentsMargins(QMargins(0, 0, 0, 0));
     box->setMargin(0);
     box->setSpacing(0);
-    box->setContentsMargins(QMargins(0, 0, 6, 2));
     m_Breadcrumbs = new MarkerBreadcrumbs(m_Ctx, this, this);
     box->addWidget(m_Breadcrumbs);
 
@@ -4086,8 +4088,6 @@ void EventBrowser::OnCaptureLoaded()
   ui->exportActions->setEnabled(true);
   ui->stepPrev->setEnabled(true);
   ui->stepNext->setEnabled(true);
-
-  updateStepNextPrevButtonState();
 }
 
 void EventBrowser::OnCaptureClosed()
@@ -4178,7 +4178,21 @@ void EventBrowser::events_currentChanged(const QModelIndex &current, const QMode
   m_Model->RefreshCache();
   m_Breadcrumbs->OnEventChanged(effectiveEID);
 
-  updateStepNextPrevButtonState();
+  const ActionDescription *action = m_Ctx.GetAction(selectedEID);
+
+  if(action && action->IsFakeMarker())
+    action = &action->children.back();
+
+  ui->stepPrev->setEnabled(action && action->previousAction);
+  ui->stepNext->setEnabled(action && action->nextAction);
+
+  // special case for the first action in the frame
+  if(selectedEID == 0)
+    ui->stepNext->setEnabled(true);
+
+  // special case for the first 'virtual' action at EID 0
+  if(m_Ctx.GetFirstAction() && selectedEID == m_Ctx.GetFirstAction()->eventId)
+    ui->stepPrev->setEnabled(true);
 
   highlightBookmarks();
 }
@@ -5332,34 +5346,13 @@ void EventBrowser::on_stepNext_clicked()
   if(!m_Ctx.IsCaptureLoaded() || !ui->stepNext->isEnabled())
     return;
 
-  const ActionDescription *action = NULL;
-  uint32_t selectedEID = 0;
-  QModelIndex idx = ui->events->currentIndex();
-  if(idx.isValid())
-  {
-    selectedEID = GetSelectedEID(idx);
-    action = m_Ctx.GetAction(selectedEID);
-  }
-  else
-  {
-    // No selected action use the current action
-    if(!action)
-      action = m_Ctx.CurAction();
-  }
+  const ActionDescription *action = m_Ctx.CurAction();
+
+  if(action)
+    action = action->nextAction;
 
   // special case for the first 'virtual' action at EID 0
   if(m_Ctx.CurEvent() == 0)
-    action = m_Ctx.GetFirstAction();
-
-  if(action)
-  {
-    if(!action->children.empty())
-      action = &action->children[0];
-    else if(action->nextAction)
-      action = action->nextAction;
-  }
-
-  if(selectedEID == 0)
     action = m_Ctx.GetFirstAction();
 
   while(action)
@@ -5379,25 +5372,10 @@ void EventBrowser::on_stepPrev_clicked()
   if(!m_Ctx.IsCaptureLoaded() || !ui->stepPrev->isEnabled())
     return;
 
-  const ActionDescription *action = NULL;
-  QModelIndex idx = ui->events->currentIndex();
-  if(idx.isValid())
-  {
-    uint32_t selectedEID = GetSelectedEID(idx);
-    action = m_Ctx.GetAction(selectedEID);
-  }
-
-  // No selected action use the current action
-  if(!action)
-    action = m_Ctx.CurAction();
+  const ActionDescription *action = m_Ctx.CurAction();
 
   if(action)
-  {
-    if(!action->children.empty())
-      action = action->children[0].previousAction;
-    else if(action->previousAction)
-      action = action->previousAction;
-  }
+    action = action->previousAction;
 
   while(action)
   {
@@ -5662,12 +5640,56 @@ void EventBrowser::events_contextMenu(const QPoint &pos)
   QAction toggleBookmark(tr("Toggle &Bookmark"), this);
   QAction selectCols(tr("&Select Columns..."), this);
   QAction rgpSelect(tr("Select &RGP Event"), this);
+  QAction batchExport(tr("Batch export meshes to FBX..."), this);
+  QAction textureExport(tr("Batch export textures..."), this);
   rgpSelect.setIcon(Icons::connect());
 
   contextMenu.addAction(&expandAll);
   contextMenu.addAction(&collapseAll);
   contextMenu.addAction(&toggleBookmark);
   contextMenu.addAction(&selectCols);
+  contextMenu.addAction(&batchExport);
+  contextMenu.addAction(&textureExport);
+  textureExport.setEnabled(m_Ctx.IsCaptureLoaded());
+  QObject::connect(&textureExport, &QAction::triggered, this, [this, index]() {
+    QSet<uint32_t> selected;
+    for(const QModelIndex &row : ui->events->selectionModel()->selectedRows())
+      selected.insert(GetSelectedEID(row));
+    if(selected.isEmpty() && index.isValid()) selected.insert(GetSelectedEID(index));
+    QVector<uint32_t> events;
+    std::function<void(const rdcarray<ActionDescription> &, bool)> collect;
+    collect = [&](const rdcarray<ActionDescription> &actions, bool inGroup) {
+      for(const ActionDescription &action : actions)
+      {
+        bool include = inGroup || selected.contains(action.eventId);
+        if(include && (action.flags & (ActionFlags::Drawcall | ActionFlags::MeshDispatch | ActionFlags::Dispatch)))
+          events.push_back(action.eventId);
+        collect(action.children, include);
+      }
+    };
+    collect(m_Ctx.CurRootActions(), false);
+    ExportTexturesBatch(m_Ctx, this, events);
+  });
+  batchExport.setEnabled(m_Ctx.IsCaptureLoaded());
+  QObject::connect(&batchExport, &QAction::triggered, this, [this, index]() {
+    QSet<uint32_t> selected;
+    for(const QModelIndex &row : ui->events->selectionModel()->selectedRows())
+      selected.insert(GetSelectedEID(row));
+    if(selected.isEmpty() && index.isValid()) selected.insert(GetSelectedEID(index));
+    QVector<uint32_t> draws;
+    std::function<void(const rdcarray<ActionDescription> &, bool)> collect;
+    collect = [&](const rdcarray<ActionDescription> &actions, bool inGroup) {
+      for(const ActionDescription &action : actions)
+      {
+        bool include = inGroup || selected.contains(action.eventId);
+        if(include && (action.flags & (ActionFlags::Drawcall | ActionFlags::MeshDispatch)))
+          draws.push_back(action.eventId);
+        collect(action.children, include);
+      }
+    };
+    collect(m_Ctx.CurRootActions(), false);
+    ExportMeshesBatch(m_Ctx, this, draws);
+  });
 
   expandAll.setIcon(Icons::arrow_out());
   collapseAll.setIcon(Icons::arrow_in());
@@ -6069,24 +6091,6 @@ void EventBrowser::UpdateDurationColumn()
   m_TimeUnit = m_Ctx.Config().EventBrowser_TimeUnit;
 
   m_Model->UpdateDurationColumn();
-}
-
-void EventBrowser::updateStepNextPrevButtonState()
-{
-  QModelIndex current = ui->events->currentIndex();
-  if(current.isValid())
-  {
-    uint32_t selectedEID = GetSelectedEID(current);
-    const ActionDescription *action = m_Ctx.GetAction(selectedEID);
-    if(action && action->IsFakeMarker())
-      action = &action->children.back();
-
-    ui->stepPrev->setEnabled(action && action->previousAction);
-    ui->stepNext->setEnabled(action && action->nextAction);
-    // special case for the first action in the frame
-    if(selectedEID == 0)
-      ui->stepNext->setEnabled(true);
-  }
 }
 
 APIEvent EventBrowser::GetAPIEventForEID(uint32_t eid)

@@ -1035,8 +1035,7 @@ struct ScopedReadPixelsSanitiser
 
 void readPixelValues(WrappedOpenGL *driver, const GLPixelHistoryResources &resources,
                      const CopyFramebuffer &copyFramebuffer, rdcarray<PixelModification> &history,
-                     int historyIndex, ModType modType, bool readStencil, uint32_t numPixels,
-                     bool perfrag)
+                     int historyIndex, ModType modType, bool readStencil, uint32_t numPixels)
 {
   ScopedReadPixelsSanitiser scope;
 
@@ -1139,9 +1138,6 @@ void readPixelValues(WrappedOpenGL *driver, const GLPixelHistoryResources &resou
                                                         : history[historyIndex + i].postMod.stencil;
       }
     }
-
-    if(perfrag && history[historyIndex + i].shaderDiscarded)
-      continue;
 
     if(modType == ModType::PreMod)
       history[historyIndex + i].preMod = modValue;
@@ -1273,7 +1269,7 @@ void QueryPrePostModPixelValues(WrappedOpenGL *driver, GLPixelHistoryResources &
           if(premodCopyFramebuffer.framebufferId != ~0u)
           {
             readPixelValues(driver, resources, premodCopyFramebuffer, history, preModLastIdx,
-                            ModType::PreMod, true, (uint32_t)(i - preModLastIdx), false);
+                            ModType::PreMod, true, (uint32_t)(i - preModLastIdx));
           }
           preModLastIdx = int(i);
         }
@@ -1346,7 +1342,7 @@ void QueryPrePostModPixelValues(WrappedOpenGL *driver, GLPixelHistoryResources &
           if(postmodCopyFramebuffer.framebufferId != ~0u)
           {
             readPixelValues(driver, resources, postmodCopyFramebuffer, history, postModLastIdx,
-                            ModType::PostMod, true, (uint32_t)(i - postModLastIdx), false);
+                            ModType::PostMod, true, (uint32_t)(i - postModLastIdx));
           }
           postModLastIdx = int(i);
         }
@@ -1380,12 +1376,12 @@ void QueryPrePostModPixelValues(WrappedOpenGL *driver, GLPixelHistoryResources &
   if(numSamples == 1 && premodCopyFramebuffer.framebufferId != 0u)
   {
     readPixelValues(driver, resources, premodCopyFramebuffer, history, preModLastIdx,
-                    ModType::PreMod, true, int(modEvents.size()) - preModLastIdx, false);
+                    ModType::PreMod, true, int(modEvents.size()) - preModLastIdx);
   }
   if(numSamples == 1 && postmodCopyFramebuffer.framebufferId != 0u)
   {
     readPixelValues(driver, resources, postmodCopyFramebuffer, history, postModLastIdx,
-                    ModType::PostMod, true, int(modEvents.size()) - preModLastIdx, false);
+                    ModType::PostMod, true, int(modEvents.size()) - postModLastIdx);
   }
 }
 
@@ -1976,8 +1972,6 @@ void QueryShaderOutPerFragment(WrappedOpenGL *driver, GLReplay *replay,
             historyIndex->postMod.stencil = -2;
           else
             historyIndex->postMod.stencil = -1;
-          if(historyIndex > history.begin() && (historyIndex - 1)->eventId == historyIndex->eventId)
-            historyIndex->preMod = (historyIndex - 1)->postMod;
           historyIndex++;
           continue;
         }
@@ -2362,6 +2356,8 @@ void QueryPrePostModPerFragment(WrappedOpenGL *driver, GLReplay *replay,
           if(historyIndex + j + 1 < history.end() &&
              (curFragHistoryIndex + 1)->eventId == curFragHistoryIndex->eventId)
             curFragHistoryIndex->postMod.stencil = -2;
+          else
+            curFragHistoryIndex->postMod.stencil = -1;
 
           if(numSamples > 1)
             historyIndex++;
@@ -2407,7 +2403,7 @@ void QueryPrePostModPerFragment(WrappedOpenGL *driver, GLReplay *replay,
             {
               readPixelValues(driver, resources, premodCopyFramebuffer, history,
                               preModLastJ + int(historyIndex - history.begin()), ModType::PreMod,
-                              false, (uint32_t)(j - preModLastJ), true);
+                              false, (uint32_t)(j - preModLastJ));
             }
             preModLastJ = int(j);
           }
@@ -2468,7 +2464,7 @@ void QueryPrePostModPerFragment(WrappedOpenGL *driver, GLReplay *replay,
           {
             readPixelValues(driver, resources, postmodCopyFramebuffer, history,
                             postModLastJ + int(historyIndex - history.begin()), ModType::PostMod,
-                            false, (uint32_t)(j - postModLastJ), true);
+                            false, (uint32_t)(j - postModLastJ));
           }
           postModLastJ = int(j);
         }
@@ -2587,14 +2583,14 @@ void QueryPrePostModPerFragment(WrappedOpenGL *driver, GLReplay *replay,
     {
       readPixelValues(driver, resources, premodCopyFramebuffer, history,
                       preModLastJ + int(historyIndex - history.begin()), ModType::PreMod, false,
-                      numFragments - preModLastJ, true);
+                      numFragments - preModLastJ);
     }
 
     if(numSamples == 1 && postmodCopyFramebuffer.framebufferId != ~0u)
     {
       readPixelValues(driver, resources, postmodCopyFramebuffer, history,
                       postModLastJ + int(historyIndex - history.begin()), ModType::PostMod, false,
-                      numFragments - postModLastJ, true);
+                      numFragments - postModLastJ);
     }
 
     state.ApplyState(driver);
@@ -2842,8 +2838,7 @@ void CalculateFragmentDepthTests(WrappedOpenGL *driver, GLPixelHistoryResources 
           depthBits = 16;
         }
 
-        if(history[historyIndex].preMod.depth >= 0.0f && history[historyIndex].shaderOut.depth >= 0.0f)
-          history[historyIndex].CheckDepthTestQuantised(depthBits, MakeCompareFunc(depthFunc));
+        history[historyIndex].CheckDepthTestQuantised(depthBits, MakeCompareFunc(depthFunc));
 
         if(HasExt[EXT_depth_bounds_test] && GL.glIsEnabled(eGL_DEPTH_BOUNDS_TEST_EXT))
         {

@@ -320,21 +320,7 @@ void MakeShaderReflection(DXBC::DXBCContainer *dxbc, const ShaderEntryPoint &ent
   }
 
   refl->debugInfo.entrySourceName = refl->entryPoint = "main";
-
-  if(!dxbc->HasDebugInfo())
-  {
-    refl->debugInfo.debugInfoLoadingLog = "Did not find debug data.\n\n";
-  }
-  else if(!dxbc->LoadedDebugBlob())
-  {
-    refl->debugInfo.debugInfoLoadingLog = "Shader contained debug data.\n\n";
-  }
-  else
-  {
-    refl->debugInfo.debugInfoLoadingLog = "Found separate debug data.\n\n";
-  }
-
-  refl->debugInfo.debugInfoLoadingLog += dxbc->GetDebugInfoLoadingLog();
+  refl->debugInfo.debugInfoLoadingLog = dxbc->GetDebugInfoLoadingLog();
 
   if(dxbc->GetDebugInfo())
   {

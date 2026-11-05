@@ -35,20 +35,8 @@ class ShaderVariableCheck:
 
         return self
 
-    def truncated(self):
-        if not (self.var.flags & rd.ShaderVariableFlags.Truncated):
-            raise TestFailureException(f"Variable {self.var.name} is not truncated")
-
-        count = self.var.columns
-        if list(self.var.value.u32v[0:count]) != [0] * count:
-                raise TestFailureException(f"Truncated variable {self.var.name} doesn't have 0 values")
-
     def value(self, value_: List[float] | List[int]):
         count = len(value_)
-
-        if self.var.flags & rd.ShaderVariableFlags.Truncated:
-            raise TestFailureException(f"Variable {self.var.name} is truncated but we're checking its value")
-
         if isinstance(value_[0], float):
             vals = []
             if self.var.type == rd.VarType.Float:
@@ -263,7 +251,6 @@ class TestCase:
         self.capture_filename = ""
         self.worker_thread = 0
         self.controller: rd.ReplayController | None = None
-        self.cap: rd.CaptureFile | None = None
         self.sdfile: rd.SDFile | None = None
         self.contexts: List[ScopedContext] = []
         self.cur_event = 0
@@ -320,7 +307,7 @@ class TestCase:
             if timeout is None:
                 timeout = util.get_demos_timeout()
             return capture.run_and_capture(exe,
-                                           f"{self.demos_test_name} --log {remote_logfile} --tmp {util.get_tmp_dir()}",
+                                           self.demos_test_name + " --log " + remote_logfile,
                                            self.demos_frame_cap, frame_count=self.demos_frame_count,
                                            captures_expected=self.demos_captures_expected, logfile=logfile,
                                            opts=self.get_capture_options(), timeout=timeout)
@@ -762,7 +749,7 @@ class TestCase:
 
         log.print("Loading capture")
 
-        self.cap, self.controller = analyse.open_capture(self.capture_filename, opts=self.get_replay_options())
+        self.controller = analyse.open_capture(self.capture_filename, opts=self.get_replay_options())
         self.sdfile = self.controller.GetStructuredFile()
 
         if not self.validate_eventids(self.controller):
@@ -782,9 +769,6 @@ class TestCase:
                 util.get_remote_server().CloseCapture(self.controller)
             else:
                 self.controller.Shutdown()
-
-        if self.cap is not None:
-            self.cap.Shutdown()
 
     def invoketest(self, debugMode: bool):
         start_time = self.get_time()
@@ -1342,13 +1326,9 @@ class TestCase:
         for i in range(len(allChanges)):
             for c in allChanges[i]:
                 if len(c.after.name) == 0 and len(c.before.name) == 0:
-                    if (c.before.type == rd.VarType.ReadOnlyResource or 
-                        c.before.type == rd.VarType.ReadWriteResource or 
-                        c.before.type == rd.VarType.ConstantBlock):
+                    if c.before.type == rd.VarType.ReadOnlyResource or c.before.type == rd.VarType.ReadWriteResource:
                         continue
-                    if (c.after.type == rd.VarType.ReadOnlyResource or 
-                        c.after.type == rd.VarType.ReadWriteResource or 
-                        c.after.type == rd.VarType.ConstantBlock):
+                    if c.after.type == rd.VarType.ReadOnlyResource or c.after.type == rd.VarType.ReadWriteResource:
                         continue
 
                 if len(c.after.name) == 0:
@@ -1379,13 +1359,9 @@ class TestCase:
         for i in reversed(range(len(allChanges))):
             for c in allChanges[i]:
                 if len(c.after.name) == 0 and len(c.before.name) == 0:
-                    if (c.before.type == rd.VarType.ReadOnlyResource or 
-                        c.before.type == rd.VarType.ReadWriteResource or 
-                        c.before.type == rd.VarType.ConstantBlock):
+                    if c.before.type == rd.VarType.ReadOnlyResource or c.before.type == rd.VarType.ReadWriteResource:
                         continue
-                    if (c.after.type == rd.VarType.ReadOnlyResource or 
-                        c.after.type == rd.VarType.ReadWriteResource or 
-                        c.after.type == rd.VarType.ConstantBlock):
+                    if c.after.type == rd.VarType.ReadOnlyResource or c.after.type == rd.VarType.ReadWriteResource:
                         continue
 
                 if len(c.before.name) == 0:

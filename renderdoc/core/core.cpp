@@ -768,7 +768,9 @@ RenderDoc::~RenderDoc()
     UnloadCrashHandler();
   }
 
-  ShutdownReplay();
+  for(auto it = m_ShutdownFunctions.begin(); it != m_ShutdownFunctions.end(); ++it)
+    (*it)();
+  m_ShutdownFunctions.clear();
 
   for(size_t i = 0; i < m_Captures.size(); i++)
   {
@@ -1026,21 +1028,13 @@ void RenderDoc::ShutdownReplay()
 
   // call shutdown functions early, as we only want to do these in the RenderDoc destructor if we
   // have no other choice (i.e. we're capturing).
-  rdcarray<ShutdownFunction> funcs;
-  {
-    SCOPED_LOCK(m_ShutdownLock);
-    funcs.swap(m_ShutdownFunctions);
-  }
-
-  for(auto it = funcs.begin(); it != funcs.end(); ++it)
+  for(auto it = m_ShutdownFunctions.begin(); it != m_ShutdownFunctions.end(); ++it)
     (*it)();
-  funcs.clear();
+  m_ShutdownFunctions.clear();
 }
 
 void RenderDoc::RegisterShutdownFunction(ShutdownFunction func)
 {
-  SCOPED_LOCK(m_ShutdownLock);
-
   auto it = std::lower_bound(m_ShutdownFunctions.begin(), m_ShutdownFunctions.end(), func);
   if(it == m_ShutdownFunctions.end() || *it != func)
     m_ShutdownFunctions.insert(it - m_ShutdownFunctions.begin(), func);
@@ -2343,6 +2337,49 @@ void RenderDoc::RemoveDeviceFrameCapturer(void *dev)
   m_DeviceFrameCapturers.erase(dev);
 }
 
+void RenderDoc::AddVulkanBridgeCapturer(IFrameCapturer *cap)
+{
+  if(IsReplayApp())
+    return;
+
+  if(cap == NULL)
+  {
+    RDCERR("Invalid Vulkan bridge frame capturer");
+    return;
+  }
+
+  SCOPED_LOCK(m_CapturerListLock);
+  if(!m_VulkanBridgeCapturers.contains(cap))
+  {
+    m_VulkanBridgeCapturers.push_back(cap);
+    RDCLOG("Vulkan bridge: registered capturer %p (%zu total)", cap,
+           m_VulkanBridgeCapturers.size());
+  }
+  else
+  {
+    RDCWARN("Vulkan bridge: duplicate registration for capturer %p (%zu total)", cap,
+            m_VulkanBridgeCapturers.size());
+  }
+}
+
+void RenderDoc::RemoveVulkanBridgeCapturer(IFrameCapturer *cap)
+{
+  if(IsReplayApp() || cap == NULL)
+    return;
+
+  SCOPED_LOCK(m_CapturerListLock);
+  size_t countBefore = m_VulkanBridgeCapturers.size();
+  m_VulkanBridgeCapturers.removeOne(cap);
+  RDCLOG("Vulkan bridge: removed capturer %p (%zu -> %zu total)", cap, countBefore,
+         m_VulkanBridgeCapturers.size());
+}
+
+rdcarray<IFrameCapturer *> RenderDoc::GetVulkanBridgeCapturers()
+{
+  SCOPED_LOCK(m_CapturerListLock);
+  return m_VulkanBridgeCapturers;
+}
+
 void RenderDoc::AddFrameCapturer(DeviceOwnedWindow devWnd, IFrameCapturer *cap)
 {
   if(IsReplayApp())
@@ -2468,9 +2505,9 @@ bool RenderDoc::DoesTrackedFileExist(const rdcstr &nickname) const
 // return false if the nickname already exists
 bool RenderDoc::AddTrackedFileReference(const rdcstr &nickname, const rdcstr &filepath)
 {
+  if(DoesTrackedFileExist(nickname))
+    return false;
   SCOPED_WRITELOCK(m_TrackedFilesLock);
-  // do not allow duplicates, overwrite with latest if we add the same one
-  m_TrackedFiles.removeIf([nickname](const TrackedFile &f) { return f.nickname == nickname; });
   m_TrackedFiles.emplace_back(nickname, filepath);
   return true;
 }

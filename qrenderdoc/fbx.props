@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Opt-in static FBX SDK, using the same /MD runtime as qrenderdoc. -->
+  <ItemDefinitionGroup Condition="'$(FBXSDKRoot)' != ''">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(FBXSDKRoot)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>RENDERDOC_FBX_SDK;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(FBXSDKLibraryDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libfbxsdk-md.lib;libxml2-md.lib;zlib-md.lib;advapi32.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <Target Name="ValidateFBXSDK" BeforeTargets="PrepareForBuild" Condition="'$(FBXSDKRoot)' != ''">
+    <Error Condition="!Exists('$(FBXSDKRoot)\include\fbxsdk.h')" Text="FBXSDKRoot must contain include\fbxsdk.h." />
+    <Error Condition="!Exists('$(FBXSDKLibraryDir)\libfbxsdk-md.lib')" Text="Set FBXSDKLibraryDir to the SDK release library directory matching the compiler and architecture." />
+  </Target>
+</Project>
