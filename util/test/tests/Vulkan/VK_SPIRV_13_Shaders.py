@@ -8,16 +8,15 @@ class VK_SPIRV_13_Shaders(rdtest.TestCase):
     def check_capture(self):
         action = self.find_action("Draw")
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
-        refl = pipe.GetShaderReflection(rd.ShaderStage.Vertex)
-        assert refl is not None
+        refl: rd.ShaderReflection = pipe.GetShaderReflection(rd.ShaderStage.Vertex)
 
-        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), refl, "")
+        disasm: str = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), refl, "")
 
         if (refl.inputSignature[0].varName != 'pos' or refl.inputSignature[0].compCount != 3):
             raise rdtest.TestFailureException("Vertex shader input 'pos' not reflected correctly")
@@ -34,10 +33,9 @@ class VK_SPIRV_13_Shaders(rdtest.TestCase):
         if 'vertmain' not in disasm:
             raise rdtest.TestFailureException("Vertex shader disassembly failed, entry point not found")
 
-        refl = pipe.GetShaderReflection(rd.ShaderStage.Fragment)
-        assert refl is not None
+        refl: rd.ShaderReflection = pipe.GetShaderReflection(rd.ShaderStage.Fragment)
 
-        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), refl, "")
+        disasm: str = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), refl, "")
 
         if (refl.inputSignature[0].varName != 'incol' or refl.inputSignature[0].compCount != 4):
             raise rdtest.TestFailureException("Fragment shader input 'incol' not reflected correctly")
@@ -52,7 +50,7 @@ class VK_SPIRV_13_Shaders(rdtest.TestCase):
 
         postvs_data = self.get_postvs(action, rd.MeshDataStage.VSOut, 0, action.numIndices)
 
-        postvs_ref: rdtest.MeshReference = {
+        postvs_ref = {
             0: {
                 'vtx': 0,
                 'idx': 0,

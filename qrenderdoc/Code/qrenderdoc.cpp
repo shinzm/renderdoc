@@ -168,7 +168,7 @@ void sharedLogOutput(QtMsgType type, const QMessageLogContext &context, const QS
 
 static QString tr(const char *string)
 {
-  return QApplication::translate("qrenderdoc", string);
+  return QApplication::translate("qrendertest", string);
 }
 
 void hideOption(QCommandLineOption &opt)
@@ -193,7 +193,7 @@ int main(int argc, char *argv[])
   // an optimisation
   qputenv("QT_NO_SUBTRACTOPAQUESIBLINGS", lit("1").toUtf8());
 
-  qInfo() << "QRenderDoc initialising.";
+  qInfo() << "QRenderTest initialising.";
 
   if(IsRunningAsAdmin())
     qInfo() << "Running as administrator";
@@ -262,7 +262,7 @@ int main(int argc, char *argv[])
 
       Catch::Session session;
 
-      session.configData().name = "QRenderDoc";
+      session.configData().name = "QRenderTest";
       session.configData().shouldDebugBreak = Catch::isDebuggerActive();
 
       ret = session.applyCommandLine(argc, mod_argv);
@@ -286,8 +286,7 @@ int main(int argc, char *argv[])
 
     {
       QCoreApplication application(argc, mod_argv);
-      PersistentConfig cfg;
-      PythonContext::GlobalInit(cfg);
+      PythonContext::GlobalInit();
 
       logstream << "Checking python binding consistency.\n";
 
@@ -326,7 +325,7 @@ int main(int argc, char *argv[])
   QApplication application(argc, argv);
 
   QCommandLineParser parser;
-  parser.setApplicationDescription(tr("Qt UI for RenderDoc"));
+  parser.setApplicationDescription(tr("Qt UI for RenderTest"));
   QCommandLineOption helpOption = parser.addHelpOption();
   QCommandLineOption versionOption = parser.addVersionOption();
 
@@ -389,7 +388,7 @@ int main(int argc, char *argv[])
 
   if(parser.isSet(versionOption))
   {
-    printf("QRenderDoc v%s (%s)\n", MAJOR_MINOR_VERSION_STRING, RENDERDOC_GetCommitHash());
+    printf("QRenderTest v%s (%s)\n", MAJOR_MINOR_VERSION_STRING, RENDERDOC_GetCommitHash());
 #if defined(DISTRIBUTION_VERSION)
     printf("Packaged for %s - %s\n", DISTRIBUTION_NAME, DISTRIBUTION_CONTACT);
 #endif
@@ -509,7 +508,7 @@ int main(int argc, char *argv[])
   RegisterMetatypeConversions();
 
   {
-    PersistentConfig config;
+    PersistantConfig config;
 
     {
       QString configPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
@@ -632,7 +631,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-      PythonContext::GlobalInit(config);
+      PythonContext::GlobalInit();
 
       if(updateApplied)
       {
@@ -671,31 +670,33 @@ int main(int argc, char *argv[])
 
         ANALYTIC_SET(UIFeatures.PythonInterop, true);
 
-        QObject::connect(&py.ctx(), &PythonContext::exception,
-                         [&pythonExited](const QString &, const QString &type, const QString &value,
-                                         int, QList<QString> frames) {
-                           if(type == lit("SystemExit"))
-                           {
-                             pythonExited = true;
-                             return;
-                           }
+        py.ctx().setGlobal("pyrenderdoc", (ICaptureContext *)&ctx);
 
-                           QString exString;
+        QObject::connect(
+            &py.ctx(), &PythonContext::exception,
+            [&pythonExited](const QString &type, const QString &value, int, QList<QString> frames) {
+              if(type == lit("SystemExit"))
+              {
+                pythonExited = true;
+                return;
+              }
 
-                           if(!frames.isEmpty())
-                           {
-                             exString += tr("Traceback (most recent call last):\n");
-                             for(const QString &f : frames)
-                               exString += QFormatStr("  %1\n").arg(f);
-                           }
+              QString exString;
 
-                           exString += QFormatStr("%1: %2\n").arg(type).arg(value);
+              if(!frames.isEmpty())
+              {
+                exString += tr("Traceback (most recent call last):\n");
+                for(const QString &f : frames)
+                  exString += QFormatStr("  %1\n").arg(f);
+              }
 
-                           qCritical("%s", exString.toUtf8().data());
-                         });
+              exString += QFormatStr("%1: %2\n").arg(type).arg(value);
+
+              qCritical("%s", exString.toUtf8().data());
+            });
 
         QObject::connect(&py.ctx(), &PythonContext::textOutput,
-                         [](const QString &, bool isStdError, const QString &output) {
+                         [](bool isStdError, const QString &output) {
                            if(isStdError)
                              qCritical("%s", output.toUtf8().data());
                            else

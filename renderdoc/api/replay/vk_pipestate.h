@@ -28,12 +28,7 @@
 
 namespace VKPipe
 {
-DOCUMENT(R"(
-VKDynamicOffset()
-VKDynamicOffset(other: VKDynamicOffset)
-
-A dynamic offset applied to a single descriptor access.
-)");
+DOCUMENT("A dynamic offset applied to a single descriptor access.");
 struct DynamicOffset
 {
   DOCUMENT("");
@@ -66,12 +61,7 @@ struct DynamicOffset
   uint64_t dynamicBufferByteOffset = 0;
 };
 
-DOCUMENT(R"(
-VKDescriptorSet()
-VKDescriptorSet(other: VKDescriptorSet)
-
-The contents of a descriptor set.
-)");
+DOCUMENT("The contents of a descriptor set.");
 struct DescriptorSet
 {
   DOCUMENT("");
@@ -121,7 +111,7 @@ struct DescriptorSet
 of their descriptors.
 
 .. note::
-  The returned values from :meth:`PipeState.GetConstantBlock` already have these offsets applied.
+  The returned values from :meth:`PipeState.GetConstantBuffer` already have these offsets applied.
 
 :type: List[VKDynamicOffset]
 )");
@@ -146,12 +136,7 @@ of their descriptors.
   bool descriptorBufferEmbeddedSamplers = false;
 };
 
-DOCUMENT(R"(
-VKDescriptorBuffer()
-VKDescriptorBuffer(other: VKDescriptorBuffer)
-
-A single descriptor buffer binding.
-)");
+DOCUMENT("A single descriptor buffer binding.");
 struct DescriptorBuffer
 {
   DOCUMENT("");
@@ -219,12 +204,7 @@ struct DescriptorBuffer
   bool samplerBuffer = false;
 };
 
-DOCUMENT(R"(
-VKPipeline()
-VKPipeline(other: VKPipeline)
-
-Describes the object and descriptor set bindings of a Vulkan pipeline object.
-)");
+DOCUMENT("Describes the object and descriptor set bindings of a Vulkan pipeline object.");
 struct Pipeline
 {
   DOCUMENT("");
@@ -275,12 +255,7 @@ When not using pipeline libraries, this will be identical to :data:`pipelinePreR
   rdcarray<DescriptorBuffer> descriptorBuffers;
 };
 
-DOCUMENT(R"(
-VKIndexBuffer()
-VKIndexBuffer(other: VKIndexBuffer)
-
-Describes the Vulkan index buffer binding.
-)")
+DOCUMENT("Describes the Vulkan index buffer binding.")
 struct IndexBuffer
 {
   DOCUMENT("");
@@ -314,12 +289,7 @@ it can be 0 if no index buffer is bound.
   uint32_t byteStride = 0;
 };
 
-DOCUMENT(R"(
-VKInputAssembly()
-VKInputAssembly(other: VKInputAssembly)
-
-Describes the vulkan input assembly configuration.
-)");
+DOCUMENT("Describes the vulkan input assembly configuration.");
 struct InputAssembly
 {
   DOCUMENT("");
@@ -346,12 +316,7 @@ struct InputAssembly
   Topology topology = Topology::Unknown;
 };
 
-DOCUMENT(R"(
-VKVertexAttribute()
-VKVertexAttribute(other: VKVertexAttribute)
-
-Describes the configuration of a single vertex attribute.
-)");
+DOCUMENT("Describes the configuration of a single vertex attribute.");
 struct VertexAttribute
 {
   DOCUMENT("");
@@ -398,12 +363,7 @@ struct VertexAttribute
   uint32_t byteOffset = 0;
 };
 
-DOCUMENT(R"(
-VKVertexBinding()
-VKVertexBinding(other: VKVertexBinding)
-
-Describes a vertex binding.
-)");
+DOCUMENT("Describes a vertex binding.");
 struct VertexBinding
 {
   DOCUMENT("");
@@ -448,12 +408,7 @@ If it's ``1`` then one element is read for each instance, and for ``N`` greater 
   uint32_t instanceDivisor = 1;
 };
 
-DOCUMENT(R"(
-VKVertexBuffer()
-VKVertexBuffer(other: VKVertexBuffer)
-
-Describes a single Vulkan vertex buffer binding.
-)")
+DOCUMENT("Describes a single Vulkan vertex buffer binding.")
 struct VertexBuffer
 {
   DOCUMENT("");
@@ -500,12 +455,7 @@ struct VertexBuffer
   uint32_t byteSize = 0;
 };
 
-DOCUMENT(R"(
-VKVertexInput()
-VKVertexInput(other: VKVertexInput)
-
-Describes the fixed-function vertex input fetch setup.
-)");
+DOCUMENT("Describes the fixed-function vertex input fetch setup.");
 struct VertexInput
 {
   DOCUMENT("");
@@ -530,12 +480,7 @@ struct VertexInput
   rdcarray<VertexBuffer> vertexBuffers;
 };
 
-DOCUMENT(R"(
-VKShader()
-VKShader(other: VKShader)
-
-Describes a Vulkan shader stage.
-)");
+DOCUMENT("Describes a Vulkan shader stage.");
 struct Shader
 {
   DOCUMENT("");
@@ -593,8 +538,8 @@ value.
   bytebuf specializationData;
 
   DOCUMENT(R"(The specialization constant ID for each entry in the specialization constant block of
-reflection info. This corresponds to the ``constantID`` in ``VkSpecializationMapEntry``, while the offset
-and size into ``specializationData`` can be obtained from the reflection info.
+reflection info. This corresponds to the constantID in VkSpecializationMapEntry, while the offset
+and size into specializationData can be obtained from the reflection info.
 
 :type: List[int]
 )")
@@ -607,12 +552,7 @@ and size into ``specializationData`` can be obtained from the reflection info.
   bool shaderObject = false;
 };
 
-DOCUMENT(R"(
-VKTessellation()
-VKTessellation(other: VKTessellation)
-
-Describes the state of the fixed-function tessellator.
-)");
+DOCUMENT("Describes the state of the fixed-function tessellator.");
 struct Tessellation
 {
   DOCUMENT("");
@@ -633,12 +573,7 @@ struct Tessellation
   bool domainOriginUpperLeft = true;
 };
 
-DOCUMENT(R"(
-VKXFBBuffer()
-VKXFBBuffer(other: VKXFBBuffer)
-
-Describes a single transform feedback binding.
-)");
+DOCUMENT("Describes a single transform feedback binding.");
 struct XFBBuffer
 {
   DOCUMENT("");
@@ -707,12 +642,7 @@ struct XFBBuffer
   uint64_t counterBufferOffset = 0;
 };
 
-DOCUMENT(R"(
-VKTransformFeedback()
-VKTransformFeedback(other: VKTransformFeedback)
-
-Describes the state of the fixed-function transform feedback.
-)");
+DOCUMENT("Describes the state of the fixed-function transform feedback.");
 struct TransformFeedback
 {
   DOCUMENT("");
@@ -733,12 +663,7 @@ struct TransformFeedback
   uint32_t rasterizedStream = 0;
 };
 
-DOCUMENT(R"(
-VKRenderArea()
-VKRenderArea(other: VKRenderArea)
-
-Describes a render area in the current framebuffer.
-)");
+DOCUMENT("Describes a render area in the current framebuffer.");
 struct RenderArea
 {
   DOCUMENT("");
@@ -784,12 +709,7 @@ struct RenderArea
   int32_t height = 0;
 };
 
-DOCUMENT(R"(
-VKViewportScissor()
-VKViewportScissor(other: VKViewportScissor)
-
-Describes a combined viewport and scissor region.
-)");
+DOCUMENT("Describes a combined viewport and scissor region.");
 struct ViewportScissor
 {
   DOCUMENT("");
@@ -818,12 +738,7 @@ struct ViewportScissor
   Scissor scissor;
 };
 
-DOCUMENT(R"(
-VKViewState()
-VKViewState(other: VKViewState)
-
-Describes the view state in the pipeline.
-)");
+DOCUMENT("Describes the view state in the pipeline.");
 struct ViewState
 {
   DOCUMENT("");
@@ -857,19 +772,14 @@ and a fragment in none of them is discarded.
 )");
   bool discardRectanglesExclusive = true;
 
-  DOCUMENT(R"(Whether depth clip range is set to ``[-1, 1]`` through ``VK_EXT_depth_clip_control``.
+  DOCUMENT(R"(Whether depth clip range is set to [-1, 1] through VK_EXT_depth_clip_control.
 
 :type: bool
 )");
   bool depthNegativeOneToOne = false;
 };
 
-DOCUMENT(R"(
-VKRasterizer()
-VKRasterizer(other: VKRasterizer)
-
-Describes the rasterizer state in the pipeline.
-)");
+DOCUMENT("Describes the rasterizer state in the pipeline.");
 struct Rasterizer
 {
   DOCUMENT("");
@@ -928,7 +838,7 @@ to ``0.0`` to ``1.0``.
   DOCUMENT(R"(The extra size in pixels to increase primitives by during conservative rasterization,
 in the x and y directions in screen space.
 
-See :data:`conservativeRasterization`
+See :data:`conservativeRasterizationMode`
 
 :type: float
 )");
@@ -964,18 +874,6 @@ See :data:`conservativeRasterization`
 :type: float
 )");
   float slopeScaledDepthBias = 0.0f;
-
-  DOCUMENT(R"(Whether the depth bias least representable value is calculated exactly.
-
-:type: bool
-)");
-  bool depthBiasExact = false;
-
-  DOCUMENT(R"(The mode used for calculating the depth bias least representable value.
-
-:type: DepthBiasMode
-)");
-  DepthBiasMode depthBiasRepresentation = DepthBiasMode::Default;
 
   DOCUMENT(R"(The fixed line width in pixels.
 
@@ -1027,12 +925,7 @@ shading rate sampled from the fragment shading rate attachment.
       ShadingRateCombiner::Keep, ShadingRateCombiner::Keep};
 };
 
-DOCUMENT(R"(
-VKSampleLocations()
-VKSampleLocations(other: VKSampleLocations)
-
-Describes state of custom sample locations in the pipeline.
-)");
+DOCUMENT("Describes state of custom sample locations in the pipeline.");
 struct SampleLocations
 {
   DOCUMENT("");
@@ -1059,12 +952,7 @@ If the list is empty then the standard sample pattern is in use.
   rdcarray<FloatVector> customLocations;
 };
 
-DOCUMENT(R"(
-VKMultiSample()
-VKMultiSample(other: VKMultiSample)
-
-Describes the multisampling state in the pipeline.
-)");
+DOCUMENT("Describes the multisampling state in the pipeline.");
 struct MultiSample
 {
   DOCUMENT("");
@@ -1099,12 +987,7 @@ struct MultiSample
   SampleLocations sampleLocations;
 };
 
-DOCUMENT(R"(
-VKColorBlendState()
-VKColorBlendState(other: VKColorBlendState)
-
-Describes the pipeline blending state.
-)");
+DOCUMENT("Describes the pipeline blending state.");
 struct ColorBlendState
 {
   DOCUMENT("");
@@ -1136,12 +1019,7 @@ struct ColorBlendState
   rdcfixedarray<float, 4> blendFactor = {1.0f, 1.0f, 1.0f, 1.0f};
 };
 
-DOCUMENT(R"(
-VKDepthStencil()
-VKDepthStencil(other: VKDepthStencil)
-
-Describes the pipeline depth-stencil state.
-)");
+DOCUMENT("Describes the pipeline depth-stencil state.");
 struct DepthStencil
 {
   DOCUMENT("");
@@ -1200,16 +1078,12 @@ struct DepthStencil
   float maxDepthBounds = 0.0f;
 };
 
-DOCUMENT(R"(
-VKRenderPass()
-VKRenderPass(other: VKRenderPass)
-
-Describes the setup of a renderpass and subpasses.
+DOCUMENT(R"(Describes the setup of a renderpass and subpasses.
 
 .. data:: AttachmentUnused
 
-  Alias for ``VK_ATTACHMENT_UNUSED``, for use by the UI to know when a value in ``colorAttachmentLocations``
-  or ``colorAttachmentInputIndices`` is mapped to ``VK_ATTACHMENT_UNUSED``.
+  Alias for VK_ATTACHMENT_UNUSED, for use by the UI to know when a value in colorAttachmentLocations
+  or colorAttachmentInputIndices is mapped to VK_ATTACHMENT_UNUSED.
 )");
 struct RenderPass
 {
@@ -1329,19 +1203,19 @@ If the list is empty, multiview is disabled and rendering is as normal.
 )");
   rdcarray<uint32_t> multiviews;
 
-  DOCUMENT(R"(If ``VK_QCOM_fragment_density_map_offset`` is enabled, contains a list of offsets applied 
+  DOCUMENT(R"(If VK_QCOM_fragment_density_map_offset is enabled, contains a list of offsets applied 
 to the fragment density map during rendering.
 
-If the list is empty, ``fdm_offset`` is disabled and rendering is as normal.
+If the list is empty, fdm_offset is disabled and rendering is as normal.
 
 :type: List[Offset]
 )");
   rdcarray<Offset> fragmentDensityOffsets;
 
-  DOCUMENT(R"(If ``VK_EXT_multisampled_render_to_single_sampled`` is enabled, contains the number of
+  DOCUMENT(R"(If VK_EXT_multisampled_render_to_single_sampled is enabled, contains the number of
 samples used to render this subpass.
 
-If the subpass is not internally multisampled, ``tileOnlyMSAASampleCount`` is set to 0.
+If the subpass is not internally multisampled, tileOnlyMSAASampleCount is set to 0.
 
 :type: int
 )");
@@ -1386,12 +1260,7 @@ If the subpass is not internally multisampled, ``tileOnlyMSAASampleCount`` is se
   static const uint32_t AttachmentUnused = ~0U;
 };
 
-DOCUMENT(R"(
-VKFramebuffer()
-VKFramebuffer(other: VKFramebuffer)
-
-Describes a framebuffer object and its attachments.
-)");
+DOCUMENT("Describes a framebuffer object and its attachments.");
 struct Framebuffer
 {
   DOCUMENT("");
@@ -1428,12 +1297,7 @@ struct Framebuffer
   uint32_t layers = 0;
 };
 
-DOCUMENT(R"(
-VKCurrentPass()
-VKCurrentPass(other: VKCurrentPass)
-
-Describes the current pass instance at the current time.
-)");
+DOCUMENT("Describes the current pass instance at the current time.");
 struct CurrentPass
 {
   DOCUMENT("");
@@ -1476,12 +1340,7 @@ struct CurrentPass
   bool stencilFeedbackAllowed = false;
 };
 
-DOCUMENT(R"(
-VKImageLayout()
-VKImageLayout(other: VKImageLayout)
-
-Contains the layout of a range of subresources in an image.
-)");
+DOCUMENT("Contains the layout of a range of subresources in an image.");
 struct ImageLayout
 {
   DOCUMENT("");
@@ -1535,12 +1394,7 @@ struct ImageLayout
   rdcstr name;
 };
 
-DOCUMENT(R"(
-VKImageData()
-VKImageData(other: VKImageData)
-
-Contains the current layout of all subresources in the image.
-)");
+DOCUMENT("Contains the current layout of all subresources in the image.");
 struct ImageData
 {
   DOCUMENT("");
@@ -1568,12 +1422,7 @@ struct ImageData
   rdcarray<ImageLayout> layouts;
 };
 
-DOCUMENT(R"(
-VKConditionalRendering()
-VKConditionalRendering(other: VKConditionalRendering)
-
-Contains the current conditional rendering state.
-)");
+DOCUMENT("Contains the current conditional rendering state.");
 struct ConditionalRendering
 {
   DOCUMENT("");
@@ -1606,9 +1455,7 @@ struct ConditionalRendering
   bool isPassing = false;
 };
 
-DOCUMENT(R"(
-The full current Vulkan pipeline state.
-)");
+DOCUMENT("The full current Vulkan pipeline state.");
 struct State
 {
 #if !defined(RENDERDOC_EXPORTS)

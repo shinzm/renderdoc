@@ -1,12 +1,12 @@
-from __future__ import annotations
 
 import sys
 import subprocess
-from typing import Callable, List, Optional, Tuple
 import renderdoc as rd
 from . import util
 from .logging import log
+from pathlib import Path
 import os
+import re
 import threading
 from time import sleep
 from abc import ABC, abstractmethod
@@ -16,14 +16,14 @@ class RemoteServer(ABC):
     def __init__(self) -> None:
         super().__init__()
         self.device = None
-        self.remote: rd.RemoteServer | None = None
+        self.remote = None
 
     @abstractmethod
-    def init(self, debugger: bool):
+    def init(self, in_process):
         pass
 
     @abstractmethod
-    def connect(self) -> rd.RemoteServer:
+    def connect(self):
         pass
 
     @abstractmethod
@@ -35,79 +35,79 @@ class RemoteServer(ABC):
         pass
 
     @abstractmethod
-    def is_connected(self) -> bool:
+    def is_connected(self):
         pass
 
     @abstractmethod
-    def get_temp_path(self, name="", timeout=20) -> str:
+    def get_temp_path(self, name, timeout):
         pass
 
     @abstractmethod
-    def get_renderdoc_path(self) -> str:
+    def get_renderdoc_path(self):
         pass
 
     @abstractmethod
-    def path_exists(self, path: str, timeout=10) -> bool:
+    def path_exists(self, path, timeout):
         pass
 
     @abstractmethod
-    def run_demos(self, args: List[str], timeout=10) -> str:
+    def run_demos(self, args, timeout):
         pass
 
     @abstractmethod
-    def inject_and_run_exe(self, cmdline: str, envmods: List[rd.EnvironmentModification], opts: rd.CaptureOptions) -> rd.ExecuteResult:
+    def inject_and_run_exe(self, cmdline, envmods, opts):
         pass
 
     @abstractmethod
-    def get_demos_exe(self) -> str:
+    def get_demos_exe(self):
         pass
 
     @abstractmethod
-    def get_hostname(self) -> str:
+    def get_hostname(self):
         pass
 
     @abstractmethod
-    def get_username(self) -> str:
+    def get_username(self):
         pass
 
     @abstractmethod
-    def retrieve_latest_test_log(self, dst: str, timeout=10) -> str | None:
+    def retrieve_latest_test_log(self, dst, timeout):
         pass
 
     @abstractmethod
-    def retrieve_latest_server_log(self, dst: str, timeout=10) -> str | None:
+    def retrieve_latest_server_log(self, dst, timeout):
         pass
 
     @abstractmethod
-    def retrieve_comms_log(self, timeout=10) -> str | None:
+    def retrieve_comms_log(self, timeout):
         pass
 
     @abstractmethod
-    def Ping(self) -> rd.ResultDetails:
+    def Ping(self):
         pass
         
     @abstractmethod
-    def OpenCapture(self, proxyid: int, logfile: str, replayOptions: rd.ReplayOptions, progressCallback: Callable[[float], None] | None) -> Tuple[rd.ResultDetails, rd.ReplayController]:
+    def OpenCapture(self):
         pass
     
     @abstractmethod
-    def CloseCapture(self, controller: rd.ReplayController):
+    def CloseCapture(self, controller):
         pass
 
     @abstractmethod
-    def ExecuteAndInject(self, app: str, workingDir: str, cmdLine: str, env: List[rd.EnvironmentModification], captureOptions: rd.CaptureOptions) -> rd.ExecuteResult:
+    def ExecuteAndInject(self):
         pass
 
     @abstractmethod
-    def CopyCaptureFromRemote(self, src: str, dst: str, progress_callback: Callable[[float], None] | None):
+    def CopyCaptureFromRemote(self, src, dst, progress_callback):
         pass
-
+    
 class AndroidRemoteServer(RemoteServer):
     # Android app IDs for the server
     ADRD_SERVER_APP64 = 'org.renderdoc.renderdoccmd.arm64'
     CONNECTION_RETRY_COUNT = 3
 
-    def __init__(self, device: Optional[str]):
+    def __init__(self, device) -> None:
         super().__init__()
         if device is None:
             raise RuntimeError('Android target specified, but no device given')
@@ -115,7 +115,7 @@ class AndroidRemoteServer(RemoteServer):
         self.remote = None
         self._base_path = ''
 
-    def init(self, debugger):        
+    def init(self, in_process):        
         # Remove any existing Vulkan layers
         subprocess.run(['adb', '-s', self.device,
                         'shell', 'settings', 'delete', 'global', 'gpu_debug_layers'], check=False)
@@ -134,7 +134,7 @@ class AndroidRemoteServer(RemoteServer):
 
         # Close the connection if the tests are forked as each test will create their own
         # connection
-        if not debugger:
+        if not in_process:
             self.disconnect()
 
     def connect(self):
@@ -156,11 +156,11 @@ class AndroidRemoteServer(RemoteServer):
 
         url = f'{protocol.GetProtocolName()}://{self.device}'
         result, remote = rd.CreateRemoteServerConnection(url)
-        if result.code == rd.ResultCode.NetworkIOFailed and protocol is not None:
+        if result == rd.ResultCode.NetworkIOFailed and protocol is not None:
             log.print("Couldn't connect to remote server, trying to start it")
 
             result = protocol.StartRemoteServer(url)
-            if not result:
+            if result != rd.ResultCode.Succeeded:
                 log.print(
                     f"Couldn't launch remote server, got error {str(result)}")
                 sys.exit(1)
@@ -169,10 +169,10 @@ class AndroidRemoteServer(RemoteServer):
             result, remote = rd.CreateRemoteServerConnection(url)
 
         # Retry a few times
-        if not result:
+        if result != rd.ResultCode.Succeeded:
             for i in range(1, self.CONNECTION_RETRY_COUNT + 1):
                 result, remote = rd.CreateRemoteServerConnection(url)
-                if result:
+                if result == rd.ResultCode.Succeeded:
                     break
                 
                 log.print(
@@ -223,7 +223,7 @@ class AndroidRemoteServer(RemoteServer):
             protocol = rd.GetDeviceProtocolController('adb')
             url = f'{protocol.GetProtocolName()}://{self.device}'
             result, self.remote = rd.CreateRemoteServerConnection(url)
-            if not result:
+            if result != rd.ResultCode.Succeeded:
                 log.print(
                     f"Couldn't connect to remote server for shutdown, got error {str(result)}")
                 return
@@ -231,20 +231,20 @@ class AndroidRemoteServer(RemoteServer):
         self.remote.ShutdownServerAndConnection()
         self.remote = None
 
-    def is_connected(self):
+    def is_connected(self) -> bool:
         return self.remote is not None
 
     def get_temp_path(self, name="", timeout=20):
         subprocess.run(['adb', '-s', self.device, 'shell', 'mkdir', '-p',
-                        self._base_path + '/' + util.get_current_test_name()],
+                        self._base_path + '/' + util.get_current_test()],
                        timeout=timeout,
                        check=True)
-        return self._base_path + util.get_current_test_name() + '/' + name
+        return self._base_path + util.get_current_test() + '/' + name
 
     def get_renderdoc_path(self):
         return self._data_path + '/' + AndroidRemoteServer.ADRD_SERVER_APP64 + '/files/RenderDoc/'
 
-    def run_demos(self, args: List[str], timeout=10):
+    def run_demos(self, args: [str], timeout=10):
         raw = subprocess.run(['adb', '-s', self.device, 'shell', 'echo', '$EPOCHREALTIME'],
                              check=True, stdout=subprocess.PIPE, timeout=timeout).stdout
         ts = str(raw, 'utf-8').strip()
@@ -281,11 +281,12 @@ class AndroidRemoteServer(RemoteServer):
         package_and_activity = f"{util.get_android_demo_app_name()}/.Loader"
         args = "-e demos RenderDoc -e rd_demos \'\"" + cmdline + "\"\'"
 
-        log.print(f"Running package:'{package_and_activity}' cmd:'{cmdline}' with env:'{envmods}'")
+        log.print("Running package:'{}' cmd:'{}' with env:'{}'".format(
+            package_and_activity, cmdline, envmods))
         res = util.get_remote_server().ExecuteAndInject(
             package_and_activity, "", args, envmods, opts)
 
-        if not res.result:
+        if res.result != rd.ResultCode.Succeeded:
             raise RuntimeError(
                 "Couldn't launch program: {}".format(str(res.result)))
 
@@ -354,7 +355,7 @@ class AndroidRemoteServer(RemoteServer):
         os.makedirs(util.get_tmp_dir(), exist_ok=True)
 
         dst = os.path.join(util.get_tmp_dir(), 'RenderDoc_Server.log')
-        log.print(f"Copying remote server comms log from '{src}' to '{dst}'")
+        log.print("Copying remote server comms log from '{}' to '{}'".format(src, dst))
         self.CopyCaptureFromRemote(src, dst, None)
 
         return dst
@@ -371,7 +372,7 @@ class AndroidRemoteServer(RemoteServer):
     def OpenCapture(self, proxyid, logfile, replayOptions, progressCallback):
         with self.mutex:
             return self.remote.OpenCapture(proxyid, logfile, replayOptions, progressCallback)
-   
+    
     def CloseCapture(self, controller):
         with self.mutex:
             return self.remote.CloseCapture(controller)
@@ -380,7 +381,7 @@ class AndroidRemoteServer(RemoteServer):
         with self.mutex:
             return self.remote.ExecuteAndInject(app, workingDir, cmdLine, env, captureOptions) 
 
-    def CopyCaptureFromRemote(self, src, dst, progress_callback):
+    def CopyCaptureFromRemote(self, src, dst, progressCallback):
         with self.mutex:
-            return self.remote.CopyCaptureFromRemote(src, dst, progress_callback)
+            return self.remote.CopyCaptureFromRemote(src, dst, progressCallback)
 

@@ -53,8 +53,6 @@ class GLXPlatform : public GLPlatform
   RDCDriver m_API = RDCDriver::OpenGL;
   bool m_Debug = false;
 
-  bool CanFreshBindOnDeletion() { return false; }
-
   bool MakeContextCurrent(GLWindowingData data)
   {
     if(GLX.glXMakeCurrent)

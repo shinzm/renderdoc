@@ -8,11 +8,11 @@ class VK_Adv_CBuffer_Zoo(rdtest.TestCase):
     def check_capture(self):
         action = self.find_action("Draw")
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         stage = rd.ShaderStage.Vertex
 

@@ -474,11 +474,6 @@ BufferDescriptorFormat WrappedVulkan::EstimateBufferDescriptor(VkDescriptorType 
       outFormat = BufferDescriptorFormat::UnknownBufferDescriptor;
     }
   }
-  else if(descSize == 8 && descriptorU64[0] == ((bufinfo.address >> 6) | ((byteSize >> 4) << 51)))
-  {
-    outFormat = BufferDescriptorFormat::Packed_5113_Aligned16_8;
-    DescriptorTrieNode::rangeToleranceMask &= 0xFULL;
-  }
   else if(descSize == 16)
   {
     if((descriptorU64[0] & ptrMask) == (bufinfo.address & ptrMask) &&
@@ -1104,13 +1099,6 @@ void WrappedVulkan::GetPointerAndSizeForDescriptor(byte *descriptorBytes, size_t
     uint64_t packed = *(uint64_t *)descriptorBytes;
     address = (packed & ((1ULL << 45) - 1)) << 4;
     size = (packed >> 45) << 4;
-  }
-  else if(format == BufferDescriptorFormat::Packed_5113_Aligned16_8 &&
-          descriptorSize == sizeof(uint64_t))
-  {
-    uint64_t packed = *(uint64_t *)descriptorBytes;
-    address = (packed & ((1ULL << 51) - 1)) << 6;
-    size = (packed >> 51) << 4;
   }
   else if(format == BufferDescriptorFormat::Pointer_ElemSize_16 &&
           descriptorSize == sizeof(uint64_t) * 2)
@@ -1784,8 +1772,18 @@ bool WrappedVulkan::Serialise_vkCreateDescriptorSetLayout(
     {
       ResourceId live;
 
-      GetResourceManager()->OverrideWrapper(ToTypedHandle(layout));
+      if(GetResourceManager()->HasWrapper(ToTypedHandle(layout)))
+      {
+        live = GetResourceManager()->GetNonDispWrapper(layout)->id;
 
+        // destroy this instance of the duplicate, as we must have matching create/destroy
+        // calls and there won't be a wrapped resource hanging around to destroy this one.
+        ObjDisp(device)->DestroyDescriptorSetLayout(Unwrap(device), layout, NULL);
+
+        // whenever the new ID is requested, return the old ID, via replacements.
+        GetResourceManager()->ReplaceResource(SetLayout, live);
+      }
+      else
       {
         live = GetResourceManager()->WrapResource(SetLayout, Unwrap(device), layout);
 

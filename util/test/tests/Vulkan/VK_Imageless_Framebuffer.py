@@ -1,3 +1,4 @@
+import renderdoc as rd
 import rdtest
 
 
@@ -7,11 +8,11 @@ class VK_Imageless_Framebuffer(rdtest.TestCase):
     def check_capture(self):
         action = self.find_action("Draw")
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         self.check_pixel_value(pipe.GetOutputTargets()[0].resource, 0.5, 0.5, [0.0, 1.0, 0.0, 1.0])
 

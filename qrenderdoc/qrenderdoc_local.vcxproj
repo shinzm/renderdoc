@@ -28,19 +28,21 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{A14A6AE5-02B1-35FE-BE59-B3E7C273B40B}</ProjectGuid>
-    <RootNamespace>qrenderdoc</RootNamespace>
+    <RootNamespace>qrendertest</RootNamespace>
     <Keyword>Qt4VSv1.0</Keyword>
-    <ProjectName>qrenderdoc</ProjectName>
+    <ProjectName>qrendertest</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(SolutionDir)\util\WindowsSDKTarget.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup>
+    <PlatformToolSet>v143</PlatformToolSet>
     <OutputDirectory>$(SolutionDir)$(Platform)\$(Configuration)\</OutputDirectory>
     <ATLMinimizesCRunTimeLibraryUsage>false</ATLMinimizesCRunTimeLibraryUsage>
     <CharacterSet>NotSet</CharacterSet>
     <ConfigurationType>Application</ConfigurationType>
-    <PrimaryOutput>qrenderdoc</PrimaryOutput>
-    <TargetName>qrenderdoc</TargetName>
+    <PrimaryOutput>qrendertest</PrimaryOutput>
+    <TargetName>qrendertest</TargetName>
     <IgnoreImportLibrary>true</IgnoreImportLibrary>
     <SolutionRelativeIntDir>$(Platform)\$(Configuration)\obj\$(ProjectName)\</SolutionRelativeIntDir>
   </PropertyGroup>
@@ -78,6 +80,21 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <Import Project="$(SolutionDir)\util\WindowsSDKFix.props" />
+  <PropertyGroup>
+    <!-- QtBaseDir would be used for everything, except in our local repository copy of Qt
+         we only have one include and split the bin/lib by platform. Since include doesn't
+         vary by platform and can be deduplicated on disk. -->
+    <QtBaseDir>$(ProjectDir)3rdparty\qt\$(Platform)</QtBaseDir>
+    <QtIncludeDir>$(ProjectDir)3rdparty\qt\include</QtIncludeDir>
+    <QtBaseDir Condition="Exists('$(RENDERDOC_QT_PREFIX64)\bin\moc.exe') AND '$(Platform)'=='x64'">$(RENDERDOC_QT_PREFIX64)</QtBaseDir>
+    <QtIncludeDir Condition="Exists('$(RENDERDOC_QT_PREFIX64)\bin\moc.exe') AND '$(Platform)'=='x64'">$(RENDERDOC_QT_PREFIX64)\include</QtIncludeDir>
+    <QtBaseDir Condition="Exists('$(RENDERDOC_QT_PREFIX32)\bin\moc.exe') AND '$(Platform)'=='Win32'">$(RENDERDOC_QT_PREFIX32)</QtBaseDir>
+    <QtIncludeDir Condition="Exists('$(RENDERDOC_QT_PREFIX32)\bin\moc.exe') AND '$(Platform)'=='Win32'">$(RENDERDOC_QT_PREFIX32)\include</QtIncludeDir>
+    <!-- bin and lib are relative to the base dir, wherever it is -->
+    <QtBinDir>$(QtBaseDir)\bin</QtBinDir>
+    <QtLibDir>$(QtBaseDir)\lib</QtLibDir>
+    <QtPluginsDir>$(QtBaseDir)\plugins</QtPluginsDir>
+  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -90,12 +107,12 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
-      <AdditionalIncludeDirectories>$(ProjectDir);3rdparty;$(IntDir)generated\;$(SolutionDir)\renderdoc\api\replay;$(PythonIncludeDir);$(PySide2Base)\include\PySide2;$(PySide2Base)\include\shiboken2;$(QtIncludeDir);$(QtIncludeDir)\QtWidgets;$(QtIncludeDir)\QtGui;$(QtIncludeDir)\QtCore;$(QtIncludeDir)\QtSvg;$(QtIncludeDir)\QtNetwork;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);3rdparty;$(IntDir)generated\;$(SolutionDir)\renderdoc\api\replay;$(PythonIncludeDir);3rdparty\pyside\include\PySide2;3rdparty\pyside\include\shiboken2;$(QtIncludeDir);$(QtIncludeDir)\QtWidgets;$(QtIncludeDir)\QtGui;$(QtIncludeDir)\QtCore;$(QtIncludeDir)\QtSvg;$(QtIncludeDir)\QtNetwork;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/Zc:strictStrings /Zc:throwingNew %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>_WINDOWS;UNICODE;WIN32;WIN64;RENDERDOC_PLATFORM_WIN32;SCINTILLA_QT=1;MAKING_LIBRARY=1;SCI_LEXER=1;QT_NO_CAST_FROM_ASCII;QT_NO_CAST_TO_ASCII;QT_WIDGETS_LIB;QT_GUI_LIB;QT_CORE_LIB;QT_SVG_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <DisableSpecificWarnings>4100;4127;4189;4714;4718;4996;5240;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4100;4127;4189;4714;4718;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>precompiled.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>precompiled.h</ForcedIncludeFiles>
@@ -104,7 +121,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <AdditionalDependencies>user32.lib;$(PythonImportLib);qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Svg.lib;Qt5Network.lib;shell32.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(PySide2Base)\$(Platform);$(QtLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>3rdparty\pyside\$(Platform);$(QtLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <DataExecutionPrevention>true</DataExecutionPrevention>
       <IgnoreImportLibrary>true</IgnoreImportLibrary>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -133,7 +150,7 @@
       <AdditionalDependencies>user32.lib;$(PythonImportLib);qtmaind.lib;Qt5Widgetsd.lib;Qt5Guid.lib;Qt5Cored.lib;Qt5Svgd.lib;Qt5Networkd.lib;shell32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="Exists('$(PySide2Base)\include\PySide2\pyside.h') AND '$(PySide2Available)'!='0'">
+  <ItemDefinitionGroup Condition="Exists('$(SolutionDir)\qrenderdoc\3rdparty\pyside\include\PySide2\pyside.h') AND '$(CustomPythonUsed)'=='0'">
     <ClCompile>
       <PreprocessorDefinitions>PYSIDE2_ENABLED=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
@@ -141,7 +158,7 @@
       <AdditionalDependencies>shiboken2.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="!Exists('$(PySide2Base)\include\PySide2\pyside.h') OR '$(PySide2Available)'=='0'">
+  <ItemDefinitionGroup Condition="!Exists('$(SolutionDir)\qrenderdoc\3rdparty\pyside\include\PySide2\pyside.h') OR '$(CustomPythonUsed)'!='0'">
     <ClCompile>
       <PreprocessorDefinitions>PYSIDE2_ENABLED=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
@@ -578,8 +595,7 @@
     </ClCompile>
     <ClCompile Include="Code\BufferFormatter.cpp" />
     <ClCompile Include="Code\Interface\Analytics.cpp" />
-    <ClCompile Include="Code\Interface\Helpers.cpp" />
-    <ClCompile Include="Code\Interface\PersistentConfig.cpp" />
+    <ClCompile Include="Code\Interface\PersistantConfig.cpp" />
     <ClCompile Include="Code\Interface\QRDInterface.cpp" />
     <ClCompile Include="Code\Interface\RemoteHost.cpp" />
     <ClCompile Include="Code\Interface\ShaderProcessingTool.cpp" />
@@ -588,9 +604,6 @@
     </ClCompile>
     <ClCompile Include="Code\qprocessinfo.cpp" />
     <ClCompile Include="Code\pyrenderdoc\PythonContext.cpp" />
-    <ClCompile Include="Code\pyrenderdoc\PythonInvokers.cpp">
-      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
     <ClCompile Include="Code\QRDUtils.cpp" />
     <ClCompile Include="Code\MiniQtHelper.cpp" />
     <ClCompile Include="Code\Resources.cpp" />
@@ -610,7 +623,6 @@
     <ClCompile Include="$(IntDir)generated\moc_ResourceInspector.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_BufferFormatSpecifier.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_ComputeDebugSelector.cpp" />
-    <ClCompile Include="$(IntDir)generated\moc_PixelDebugSelector.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_FindReplace.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_BufferViewer.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_CaptureDialog.cpp" />
@@ -652,7 +664,6 @@
     <ClCompile Include="$(IntDir)generated\moc_RDTableView.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_RDTableWidget.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_RDTreeView.cpp" />
-    <ClCompile Include="$(IntDir)generated\moc_RDToolTip.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_RDTreeWidget.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_ResourcePreview.cpp" />
     <ClCompile Include="$(IntDir)generated\moc_ScintillaDocument.cpp">
@@ -710,13 +721,11 @@
     <ClCompile Include="Widgets\BufferFormatSpecifier.cpp" />
     <ClCompile Include="Widgets\CollapseGroupBox.cpp" />
     <ClCompile Include="Widgets\ComputeDebugSelector.cpp" />
-    <ClCompile Include="Widgets\PixelDebugSelector.cpp" />
     <ClCompile Include="Widgets\FindReplace.cpp" />
     <ClCompile Include="Widgets\Extended\RDListWidget.cpp" />
     <ClCompile Include="Widgets\Extended\RDTableView.cpp" />
     <ClCompile Include="Widgets\Extended\RDTableWidget.cpp" />
     <ClCompile Include="Widgets\Extended\RDTreeView.cpp" />
-    <ClCompile Include="Widgets\Extended\RDToolTip.cpp" />
     <ClCompile Include="Widgets\Extended\RDTreeWidget.cpp" />
     <ClCompile Include="Widgets\PipelineFlowChart.cpp" />
     <ClCompile Include="Widgets\RangeHistogram.cpp" />
@@ -940,8 +949,7 @@
     </CustomBuild>
     <ClInclude Include="3rdparty\flowlayout\FlowLayout.h" />
     <ClInclude Include="Code\Interface\Analytics.h" />
-    <ClInclude Include="Code\Interface\Helpers.h" />
-    <ClInclude Include="Code\Interface\PersistentConfig.h" />
+    <ClInclude Include="Code\Interface\PersistantConfig.h" />
     <ClInclude Include="Code\Interface\QRDInterface.h" />
     <ClInclude Include="Code\Interface\RemoteHost.h" />
     <ClInclude Include="Code\Interface\Extensions.h" />
@@ -964,7 +972,6 @@
     <ClInclude Include="$(IntDir)generated\ui_ResourceInspector.h" />
     <ClInclude Include="$(IntDir)generated\ui_BufferFormatSpecifier.h" />
     <ClInclude Include="$(IntDir)generated\ui_ComputeDebugSelector.h" />
-    <ClInclude Include="$(IntDir)generated\ui_PixelDebugSelector.h" />
     <ClInclude Include="$(IntDir)generated\ui_FindReplace.h" />
     <ClInclude Include="$(IntDir)generated\ui_BufferViewer.h" />
     <ClInclude Include="$(IntDir)generated\ui_CaptureDialog.h" />
@@ -1038,12 +1045,6 @@
       <Outputs>$(IntDir)generated\moc_%(Filename).cpp</Outputs>
     </CustomBuild>
     <CustomBuild Include="Widgets\ComputeDebugSelector.h">
-      <AdditionalInputs>%(Fullpath);$(QtBinDir)\moc.exe;%(AdditionalInputs)</AdditionalInputs>
-      <Command>"$(QtBinDir)\moc.exe" -DUNICODE -DWIN32 -DWIN64 -D_WIN32 -D_WIN64 -DRENDERDOC_PLATFORM_WIN32 -DSCINTILLA_QT=1 -DSCI_LEXER=1 -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_CORE_LIB -D_MSC_VER=1900 -I"$(ProjectDir)." -I"$(SolutionDir)\renderdoc\api\replay" -I"$(QtIncludeDir)" -I"$(QtIncludeDir)\QtWidgets" -I"$(QtIncludeDir)\QtGui" -I"$(QtIncludeDir)\QtCore" "%(Fullpath)" -o "$(IntDir)generated\moc_%(Filename).cpp"</Command>
-      <Message>MOC %(Filename).h</Message>
-      <Outputs>$(IntDir)generated\moc_%(Filename).cpp</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="Widgets\PixelDebugSelector.h">
       <AdditionalInputs>%(Fullpath);$(QtBinDir)\moc.exe;%(AdditionalInputs)</AdditionalInputs>
       <Command>"$(QtBinDir)\moc.exe" -DUNICODE -DWIN32 -DWIN64 -D_WIN32 -D_WIN64 -DRENDERDOC_PLATFORM_WIN32 -DSCINTILLA_QT=1 -DSCI_LEXER=1 -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_CORE_LIB -D_MSC_VER=1900 -I"$(ProjectDir)." -I"$(SolutionDir)\renderdoc\api\replay" -I"$(QtIncludeDir)" -I"$(QtIncludeDir)\QtWidgets" -I"$(QtIncludeDir)\QtGui" -I"$(QtIncludeDir)\QtCore" "%(Fullpath)" -o "$(IntDir)generated\moc_%(Filename).cpp"</Command>
       <Message>MOC %(Filename).h</Message>
@@ -1134,12 +1135,6 @@
       <Outputs>$(IntDir)generated\moc_%(Filename).cpp</Outputs>
     </CustomBuild>
     <CustomBuild Include="Widgets\Extended\RDTreeView.h">
-      <AdditionalInputs>%(Fullpath);$(QtBinDir)\moc.exe;%(AdditionalInputs)</AdditionalInputs>
-      <Command>"$(QtBinDir)\moc.exe" -DUNICODE -DWIN32 -DWIN64 -D_WIN32 -D_WIN64 -DRENDERDOC_PLATFORM_WIN32 -DSCINTILLA_QT=1 -DSCI_LEXER=1 -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_CORE_LIB -D_MSC_VER=1900 -I"$(ProjectDir)." -I"$(SolutionDir)\renderdoc\api\replay" -I"$(QtIncludeDir)" -I"$(QtIncludeDir)\QtWidgets" -I"$(QtIncludeDir)\QtGui" -I"$(QtIncludeDir)\QtCore" "%(Fullpath)" -o "$(IntDir)generated\moc_%(Filename).cpp"</Command>
-      <Message>MOC %(Filename).h</Message>
-      <Outputs>$(IntDir)generated\moc_%(Filename).cpp</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="Widgets\Extended\RDToolTip.h">
       <AdditionalInputs>%(Fullpath);$(QtBinDir)\moc.exe;%(AdditionalInputs)</AdditionalInputs>
       <Command>"$(QtBinDir)\moc.exe" -DUNICODE -DWIN32 -DWIN64 -D_WIN32 -D_WIN64 -DRENDERDOC_PLATFORM_WIN32 -DSCINTILLA_QT=1 -DSCI_LEXER=1 -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_CORE_LIB -D_MSC_VER=1900 -I"$(ProjectDir)." -I"$(SolutionDir)\renderdoc\api\replay" -I"$(QtIncludeDir)" -I"$(QtIncludeDir)\QtWidgets" -I"$(QtIncludeDir)\QtGui" -I"$(QtIncludeDir)\QtCore" "%(Fullpath)" -o "$(IntDir)generated\moc_%(Filename).cpp"</Command>
       <Message>MOC %(Filename).h</Message>
@@ -1471,6 +1466,9 @@
     <CoreReplayHeaders>@(CoreReplayHeaders)</CoreReplayHeaders>
     <QRDHeaders>@(QRDHeaders)</QRDHeaders>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <TargetName>qrendertest</TargetName>
+  </PropertyGroup>
   <ItemGroup>
     <CustomBuild Include="Code\pyrenderdoc\renderdoc.i">
       <FileType>Document</FileType>
@@ -1495,12 +1493,6 @@
       <Outputs>$(IntDir)generated\ui_%(Filename).h</Outputs>
     </CustomBuild>
     <CustomBuild Include="Widgets\ComputeDebugSelector.ui">
-      <AdditionalInputs>%(Fullpath);$(QtBinDir)\uic.exe;%(AdditionalInputs)</AdditionalInputs>
-      <Command>"$(QtBinDir)\uic.exe" "%(Fullpath)" -o "$(IntDir)generated\ui_%(Filename).h"</Command>
-      <Message>UIC %(Filename).ui</Message>
-      <Outputs>$(IntDir)generated\ui_%(Filename).h</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="Widgets\PixelDebugSelector.ui">
       <AdditionalInputs>%(Fullpath);$(QtBinDir)\uic.exe;%(AdditionalInputs)</AdditionalInputs>
       <Command>"$(QtBinDir)\uic.exe" "%(Fullpath)" -o "$(IntDir)generated\ui_%(Filename).h"</Command>
       <Message>UIC %(Filename).ui</Message>
@@ -1778,9 +1770,8 @@
     <None Include="Code\pyrenderdoc\pyconversion.h" />
     <None Include="Code\pyrenderdoc\pyconversion.i" />
     <None Include="Code\pyrenderdoc\cosmetics.i" />
-    <None Include="Code\pyrenderdoc\parse_reflection.py" />
     <CustomBuild Include="Resources\resources.qrc">
-      <AdditionalInputs>Resources\resources.qrc;Code\pyrenderdoc\parse_reflection.py;$(QtBinDir)\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
+      <AdditionalInputs>Resources\resources.qrc;$(QtBinDir)\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
       <Command>"$(QtBinDir)\rcc.exe" -name resources Resources\resources.qrc -o "$(IntDir)generated\qrc_resources.cpp"</Command>
       <Message>RCC resources.qrc</Message>
       <Outputs>$(IntDir)generated\qrc_resources.cpp</Outputs>
@@ -1804,227 +1795,202 @@
   <ItemGroup>
     <Content Include="$(PythonStandardLibraryZip)">
       <Link>python$(PythonMajorMinor).zip</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(PythonDLLsDir)\_ctypes.pyd">
       <Link>_ctypes.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(PythonInterpDLL)">
       <Link>python$(PythonMajorMinor).dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(PythonDLLsDir)\libffi-8.dll" Condition="Exists('$(PythonDLLsDir)\libffi-8.dll')">
       <Link>libffi-8.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <Visible>false</Visible>
-    </Content>
-    <Content Include="$(PythonDLLsDir)\libffi-7.dll" Condition="Exists('$(PythonDLLsDir)\libffi-7.dll')">
-      <Link>libffi-7.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(PythonDLLsDir)\select.pyd" Condition="Exists('$(PythonDLLsDir)\select.pyd')">
       <Link>select.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(PythonDLLsDir)\_hashlib.pyd" Condition="Exists('$(PythonDLLsDir)\_hashlib.pyd')">
       <Link>_hashlib.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(PythonDLLsDir)\_socket.pyd" Condition="Exists('$(PythonDLLsDir)\_socket.pyd')">
       <Link>_socket.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(PythonDLLsDir)\_ssl.pyd" Condition="Exists('$(PythonDLLsDir)\_ssl.pyd')">
       <Link>_ssl.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(PythonDLLsDir)\libcrypto-3.dll" Condition="Exists('$(PythonDLLsDir)\libcrypto-3.dll')">
       <Link>libcrypto-3.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(PythonDLLsDir)\libssl-3.dll" Condition="Exists('$(PythonDLLsDir)\libssl-3.dll')">
       <Link>libssl-3.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <Visible>false</Visible>
-    </Content>
-    <Content Include="$(PythonDLLsDir)\pyexpat.pyd" Condition="Exists('$(PythonDLLsDir)\pyexpat.pyd')">
-      <Link>pyexpat.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <Visible>false</Visible>
-    </Content>
-    <Content Include="$(PythonDLLsDir)\_socket.pyd" Condition="Exists('$(PythonDLLsDir)\_socket.pyd')">
-      <Link>_socket.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <Visible>false</Visible>
-    </Content>
-    <Content Include="$(PythonDLLsDir)\_queue.pyd" Condition="Exists('$(PythonDLLsDir)\_queue.pyd')">
-      <Link>_queue.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(PythonDLLsDir)\unicodedata.pyd" Condition="Exists('$(PythonDLLsDir)\unicodedata.pyd')">
       <Link>unicodedata.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
-    <Content Include="$(PySide2Base)\$(Platform)\shiboken2.dll" Condition="Exists('$(PySide2Base)\$(Platform)\shiboken2.dll')">
+    <Content Include="3rdparty\pyside\$(Platform)\shiboken2.dll" Condition="Exists('$(ProjectDir)3rdparty\pyside\$(Platform)\shiboken2.dll')">
       <Link>shiboken2.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
-    <Content Include="$(PySide2Base)\$(Platform)\shiboken2\shiboken2.pyd" Condition="Exists('$(PySide2Base)\$(Platform)\shiboken2\shiboken2.pyd')">
-      <Link>shiboken2\shiboken2.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <Visible>false</Visible>
-    </Content>
-    <Content Include="$(PySide2Base)\$(Platform)\shiboken2\__init__.py" Condition="Exists('$(PySide2Base)\$(Platform)\shiboken2\__init__.py')">
-      <Link>shiboken2\__init__.py</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <Visible>false</Visible>
-    </Content>
-    <Content Include="$(PySide2Base)\$(Platform)\PySide2\pyside2.dll" Condition="Exists('$(PySide2Base)\$(Platform)\PySide2\pyside2.dll')">
+    <Content Include="3rdparty\pyside\$(Platform)\PySide2\pyside2.dll" Condition="Exists('$(ProjectDir)3rdparty\pyside\$(Platform)\PySide2\pyside2.dll')">
       <Link>PySide2\pyside2.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
-    <Content Include="$(PySide2Base)\$(Platform)\PySide2\__init__.py" Condition="Exists('$(PySide2Base)\$(Platform)\PySide2\__init__.py')">
+    <Content Include="3rdparty\pyside\$(Platform)\PySide2\Qt5Qml.dll" Condition="Exists('$(ProjectDir)3rdparty\pyside\$(Platform)\PySide2\Qt5Qml.dll')">
+      <Link>PySide2\Qt5Qml.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </Content>
+    <Content Include="3rdparty\pyside\$(Platform)\PySide2\__init__.py" Condition="Exists('$(ProjectDir)3rdparty\pyside\$(Platform)\PySide2\__init__.py')">
       <Link>PySide2\__init__.py</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
-    <Content Include="$(PySide2Base)\$(Platform)\PySide2\_utils.py" Condition="Exists('$(PySide2Base)\$(Platform)\PySide2\_utils.py')">
+    <Content Include="3rdparty\pyside\$(Platform)\PySide2\_utils.py" Condition="Exists('$(ProjectDir)3rdparty\pyside\$(Platform)\PySide2\_utils.py')">
       <Link>PySide2\_utils.py</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
-    <Content Include="$(PySide2Base)\$(Platform)\PySide2\QtCore.pyd" Condition="Exists('$(PySide2Base)\$(Platform)\PySide2\QtCore.pyd')">
+    <Content Include="3rdparty\pyside\$(Platform)\PySide2\QtCore.pyd" Condition="Exists('$(ProjectDir)3rdparty\pyside\$(Platform)\PySide2\QtCore.pyd')">
       <Link>PySide2\QtCore.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
-    <Content Include="$(PySide2Base)\$(Platform)\PySide2\QtGui.pyd" Condition="Exists('$(PySide2Base)\$(Platform)\PySide2\QtGui.pyd')">
+    <Content Include="3rdparty\pyside\$(Platform)\PySide2\QtGui.pyd" Condition="Exists('$(ProjectDir)3rdparty\pyside\$(Platform)\PySide2\QtGui.pyd')">
       <Link>PySide2\QtGui.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
-    <Content Include="$(PySide2Base)\$(Platform)\PySide2\QtWidgets.pyd" Condition="Exists('$(PySide2Base)\$(Platform)\PySide2\QtWidgets.pyd')">
+    <Content Include="3rdparty\pyside\$(Platform)\PySide2\QtWidgets.pyd" Condition="Exists('$(ProjectDir)3rdparty\pyside\$(Platform)\PySide2\QtWidgets.pyd')">
       <Link>PySide2\QtWidgets.pyd</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtPluginsDir)\platforms\qwindows.dll">
       <Link>qtplugins\platforms\qwindows.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtPluginsDir)\imageformats\qsvg.dll">
       <Link>qtplugins\imageformats\qsvg.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\Qt5Core.dll">
       <Link>Qt5Core.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>False</Visible>
     </Content>
     <Content Include="$(QtBinDir)\Qt5Gui.dll">
       <Link>Qt5Gui.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\Qt5Widgets.dll">
       <Link>Qt5Widgets.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\Qt5Svg.dll">
       <Link>Qt5Svg.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\Qt5Network.dll">
       <Link>Qt5Network.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\libcrypto-1_1.dll" Condition="Exists('$(QtBinDir)\libcrypto-1_1.dll') AND '$(Platform)'=='Win32'">
       <Link>libcrypto-1_1.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\libssl-1_1.dll" Condition="Exists('$(QtBinDir)\libssl-1_1.dll') AND '$(Platform)'=='Win32'">
       <Link>libssl-1_1.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\libcrypto-1_1-x64.dll" Condition="Exists('$(QtBinDir)\libcrypto-1_1-x64.dll') AND '$(Platform)'=='x64'">
       <Link>libcrypto-1_1-x64.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\libssl-1_1-x64.dll" Condition="Exists('$(QtBinDir)\libssl-1_1-x64.dll') AND '$(Platform)'=='x64'">
       <Link>libssl-1_1-x64.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\libeay32.dll" Condition="Exists('$(QtBinDir)\libeay32.dll')">
       <Link>libeay32.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\ssleay32.dll" Condition="Exists('$(QtBinDir)\ssleay32.dll')">
       <Link>ssleay32.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtPluginsDir)\platforms\qwindowsd.dll" Condition="$(Configuration)==QTDebug">
       <Link>qtplugins\platforms\qwindowsd.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtPluginsDir)\imageformats\qsvgd.dll" Condition="$(Configuration)==QTDebug">
       <Link>qtplugins\imageformats\qsvgd.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\Qt5Cored.dll" Condition="$(Configuration)==QTDebug">
       <Link>Qt5Cored.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>False</Visible>
     </Content>
     <Content Include="$(QtBinDir)\Qt5Cored.dll" Condition="$(Configuration)==QTDebug">
       <Link>Qt5Cored.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>False</Visible>
     </Content>
     <Content Include="$(QtBinDir)\Qt5Guid.dll" Condition="$(Configuration)==QTDebug">
       <Link>Qt5Guid.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\Qt5Widgetsd.dll" Condition="$(Configuration)==QTDebug">
       <Link>Qt5Widgetsd.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\Qt5Svgd.dll" Condition="$(Configuration)==QTDebug">
       <Link>Qt5Svgd.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
     <Content Include="$(QtBinDir)\Qt5Networkd.dll" Condition="$(Configuration)==QTDebug">
       <Link>Qt5Networkd.dll</Link>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
   </ItemGroup>
@@ -2185,7 +2151,6 @@
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="python36.natvis" />
-    <Natvis Include="python38.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
@@ -2196,11 +2161,4 @@
     </PropertyPageSchema>
   </ItemGroup>
   <Import Project="$(SolutionDir)\qrenderdoc\Code\pyrenderdoc\python.props" />
-  <ItemGroup>
-    <ProjectTools Include="custom_qt_sheet" />
-    <PropertyPageSchema Include="custom_qt_sheet.xml">
-      <Context>Project</Context>
-    </PropertyPageSchema>
-  </ItemGroup>
-  <Import Project="custom_qt.props" />
 </Project>

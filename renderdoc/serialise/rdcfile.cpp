@@ -456,17 +456,6 @@ void RDCFile::Init(StreamReader &reader)
       // ASCII section
       char c = 0;
       reader.Read(c);
-
-      if(c == '\r')
-        reader.Read(c);
-
-      if(c != '\n')
-      {
-        SET_ERROR_RESULT(m_Error, ResultCode::FileCorrupted,
-                         "Invalid newline sequence in ASCII data section");
-        return;
-      }
-
       if(reader.IsErrored())
       {
         SET_ERROR_RESULT(m_Error, ResultCode::FileCorrupted, "Invalid ASCII data section '%hhx'", c);
@@ -483,27 +472,15 @@ void RDCFile::Init(StreamReader &reader)
 
       c = '0';
 
-      while(!reader.IsErrored() && c != '\r' && c != '\n')
+      while(!reader.IsErrored() && c != '\n')
       {
         reader.Read(c);
 
-        if(c == '\r' || c == '\n' || reader.IsErrored())
+        if(c == '\n' || reader.IsErrored())
           break;
 
         length *= 10;
         length += int(c - '0');
-      }
-
-      if(c == '\r')
-      {
-        reader.Read(c);
-
-        if(c != '\n')
-        {
-          SET_ERROR_RESULT(m_Error, ResultCode::FileCorrupted,
-                           "Invalid newline sequence in ASCII data section");
-          return;
-        }
       }
 
       if(reader.IsErrored() || reader.AtEnd())
@@ -516,27 +493,15 @@ void RDCFile::Init(StreamReader &reader)
 
       c = '0';
 
-      while(!reader.AtEnd() && c != '\r' && c != '\n')
+      while(!reader.AtEnd() && c != '\n')
       {
         reader.Read(c);
 
-        if(c == '\r' || c == '\n' || reader.IsErrored())
+        if(c == '\n' || reader.IsErrored())
           break;
 
         type *= 10;
         type += int(c - '0');
-      }
-
-      if(c == '\r')
-      {
-        reader.Read(c);
-
-        if(c != '\n')
-        {
-          SET_ERROR_RESULT(m_Error, ResultCode::FileCorrupted,
-                           "Invalid newline sequence in ASCII data section");
-          return;
-        }
       }
 
       if(reader.IsErrored() || reader.AtEnd())
@@ -549,27 +514,15 @@ void RDCFile::Init(StreamReader &reader)
 
       c = '0';
 
-      while(!reader.AtEnd() && c != '\r' && c != '\n')
+      while(!reader.AtEnd() && c != '\n')
       {
         reader.Read(c);
 
-        if(c == '\r' || c == '\n' || reader.IsErrored())
+        if(c == '\n' || reader.IsErrored())
           break;
 
         version *= 10;
         version += int(c - '0');
-      }
-
-      if(c == '\r')
-      {
-        reader.Read(c);
-
-        if(c != '\n')
-        {
-          SET_ERROR_RESULT(m_Error, ResultCode::FileCorrupted,
-                           "Invalid newline sequence in ASCII data section");
-          return;
-        }
       }
 
       if(reader.IsErrored() || reader.AtEnd())
@@ -582,27 +535,14 @@ void RDCFile::Init(StreamReader &reader)
 
       c = 0;
 
-      while(!reader.AtEnd() && c != '\r' && c != '\n')
+      while(!reader.AtEnd() && c != '\n')
       {
         reader.Read(c);
 
-        if(c == '\r' || c == '\n' || reader.IsErrored())
+        if(c == 0 || c == '\n' || reader.IsErrored())
           break;
 
-        if(c != 0)
-          name.push_back(c);
-      }
-
-      if(c == '\r')
-      {
-        reader.Read(c);
-
-        if(c != '\n')
-        {
-          SET_ERROR_RESULT(m_Error, ResultCode::FileCorrupted,
-                           "Invalid newline sequence in ASCII data section");
-          return;
-        }
+        name.push_back(c);
       }
 
       if(reader.IsErrored() || reader.AtEnd())

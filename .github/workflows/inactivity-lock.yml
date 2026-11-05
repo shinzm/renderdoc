@@ -14,12 +14,12 @@ jobs:
       pull-requests: write
     steps:
       - name: 🔒 Lock closed issues and PRs
-        uses: klaasnicolaas/action-inactivity-lock@v2.0.1
+        uses: klaasnicolaas/action-inactivity-lock@v1.1.3
         id: lock
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           rate-limit-buffer: 500
-          days-inactive-issues: 10
-          days-inactive-prs: 2
+          days-inactive-issues: 70
+          days-inactive-prs: 70
           lock-reason-issues: "resolved"
           lock-reason-prs: "resolved"

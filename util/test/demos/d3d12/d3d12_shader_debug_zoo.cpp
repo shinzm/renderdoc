@@ -199,18 +199,6 @@ v2f main(consts IN, uint tri : SV_InstanceID)
 // we want to do this on purpose
 #pragma warning( disable : 3556 )
 
-#if (SM_5_1 || SM_6_0 || SM_6_2 || SM_6_6)
-#define ARRAYED_RESOURCES 1
-#else
-#define ARRAYED_RESOURCES 0
-#endif
-
-#if (SM_6_0 || SM_6_2 || SM_6_6)
-#define UNBOUND_CBVS 1
-#else
-#define UNBOUND_CBVS 0
-#endif
-
 struct InnerStruct
 {
   float a;
@@ -260,31 +248,12 @@ Buffer<float4> rgb_srv : register(t103);
 SamplerState linearclamp : register(s0);
 
 StructuredBuffer<MyStruct> rootsrv : register(t20);
-ByteAddressBuffer rootbytesrv : register(t21);
 StructuredBuffer<MyStruct> appendsrv : register(t40);
 Texture2D<float> dimtex_edge : register(t41);
 #if (SM_6_2 || SM_6_6) && HAS_16BIT_SHADER_OPS 
 StructuredBuffer<int16_t> int16srv : register(t42);
 #else
 Buffer<int> int16srv : register(t43);
-#endif
-
-#if ARRAYED_RESOURCES
-Texture2D<float4> tex2ds[14] : register(t0, space1);
-SamplerState samplers[14] : register(s0, space1);
-RWStructuredBuffer<MyStruct> buffers[14] : register(u0, space1);
-struct Data
-{
-  float4 zeroes;
-  uint4 index;
-  float4 padding[14];
-};
-ConstantBuffer<Data> cbuffers[14] : register(b0, space1);
-
-Texture2D<float4> unbounded_tex2ds[] : register(t0, space2);
-SamplerState unbounded_samplers[] : register(s0, space2);
-RWStructuredBuffer<MyStruct> unbounded_buffers[] : register(u0, space2);
-ConstantBuffer<Data> unbounded_cbuffers[] : register(b0, space2);
 #endif
 
 static const int gConstInt = 10;
@@ -304,7 +273,6 @@ float4 main(v2f IN) : SV_Target0
   float tiny = IN.tinyVal;
 
   int intval = IN.intval;
-  uint zerou = uint(zero);
 
   if(IN.tri == 0)
     return float4(log(negone), log(zero), log(posone), 1.0f);
@@ -407,8 +375,8 @@ float4 main(v2f IN) : SV_Target0
   if(IN.tri == 33)
     return float4(-nan, abs(nan), 0.0f, 1.0f);
 
-  // check denorm flushing (not undefined, but broken on NV currently)
-  if(IN.tri == 34) // undefined-test
+  // check denorm flushing
+  if(IN.tri == 34)
     return float4(tiny * 1.5e-8f, tiny * 1.5e-9f, asfloat(intval) == 0.0f ? 1.0f : 0.0f, 1.0f);
 
   // test reading/writing byte address data
@@ -1005,8 +973,6 @@ float4 main(v2f IN) : SV_Target0
     oneintbufrwtest[z] = 10;
     return oneintbufrwtest[z2];
   }
-)EOSHADER"
-                                    R"EOSHADER(
   // test UAV loads and stores only write the data they should
   if(IN.tri == 100)
   {
@@ -1160,139 +1126,6 @@ float4 main(v2f IN) : SV_Target0
     return Color;
   }
 #endif // #if (SM_6_0 || SM_6_2 || SM_6_6)
-  if(IN.tri == 111)
-  {
-    // first == false 
-    bool first = (intval == (int)IN.tri);
-    // second == true
-    bool second = (intval > (int)IN.tri);
-    bool result = true;
-    if (!(first)) 
-      result = !(second);
-    else 
-      result = true;
-
-    // result should be false
-    float4 Color = float4(0.0, 0.0, 0.0, 0.0);
-    if (result)
-      Color = float4(1.0, 1.0, 1.0, 1.0);
-
-    return Color;
-  }
-  if(IN.tri == 112)
-  {
-    // use this to ensure the compiler doesn't know we're using fixed locations
-    uint z = intval - IN.tri - 7;
-
-    return float4(asfloat(rootbytesrv.Load(z+0).x), asfloat(rootbytesrv.Load(z+4).x),
-                  asfloat(rootbytesrv.Load(z+8).x), float(rootbytesrv.Load(z+12).x));
-  }
-  if(IN.tri == 113)
-  {
-    uint a = 0, b = 0, c = 0;
-    byterotest.GetDimensions(a);
-    byterwtest.GetDimensions(b);
-    byterwtest2.GetDimensions(c);
-    return float4(float(a), float(b), float(c), 0.0f);
-  }
-#if ARRAYED_RESOURCES
-  if(IN.tri == 114)
-  {
-    float2 uv = posone * float2(0.55f, 0.48f);
-    return tex2ds[zerou+9].Sample(linearclamp, uv, int2(4, 3));
-  }
-  if(IN.tri == 115)
-  {
-    float2 uv = posone * float2(1.55f, 1.48f);
-    return smiley.Sample(samplers[zerou+2], uv, int2(4, 3));
-  }
-  if(IN.tri == 116)
-  {
-    uint z = intval - IN.tri - 7;
-
-    MyStruct write = (MyStruct)0;
-
-    write.a = zero+1.0f;
-    write.c = zero+2.0f;
-    write.e = zero+3.0f;
-    write.b = float4(zero+4.0f, zero+5.0f, zero+6.0f, zero+7.0f);
-    write.d.a = zero+8.0f;
-    write.d.b[0] = zero+9.0f;
-    write.d.b[1] = zero+10.0f;
-    write.d.c = zero+11.0f;
-
-    buffers[zerou+3][z+2] = write;
-    MyStruct read = buffers[z+3][zerou+2];
-    return float4(read.b.xyz, read.c);
-  }
-  if(IN.tri == 117)
-  {
-    float4 Color = float4(0,0,0,0);
-    Color.x = float(cbuffers[zerou+1].index.x);
-    Color.y = float(cbuffers[zerou+2].index.y);
-    Color.z = float(cbuffers[zerou+3].index.z);
-    Color.w = float(cbuffers[zerou+4].index.w);
-    return Color;
-  }
-  if(IN.tri == 118)
-  {
-    float2 uv = posone * float2(0.55f, 0.48f);
-#if UNBOUND_CBVS
-    uint index = unbounded_cbuffers[zerou+11].index.y;
-#else
-    uint index = zerou+4;
-#endif
-    index = index % 14;
-    return unbounded_tex2ds[index].Sample(linearclamp, uv, int2(4, 3));
-  }
-  if(IN.tri == 119)
-  {
-    float2 uv = posone * float2(1.55f, 1.48f);
-#if UNBOUND_CBVS
-    uint index = unbounded_cbuffers[zerou+3].index.w;
-#else
-    uint index = zerou+2;
-#endif
-    index = index % 14;
-    return smiley.Sample(unbounded_samplers[index], uv, int2(4, 3));
-  }
-  if(IN.tri == 120)
-  {
-    uint z = intval - IN.tri - 7;
-
-    MyStruct write = (MyStruct)0;
-
-    write.a = zero+1.0f;
-    write.c = zero+2.0f;
-    write.e = zero+3.0f;
-    write.b = float4(zero+4.0f, zero+5.0f, zero+6.0f, zero+7.0f);
-    write.d.a = zero+8.0f;
-    write.d.b[0] = zero+9.0f;
-    write.d.b[1] = zero+10.0f;
-    write.d.c = zero+11.0f;
-
-#if UNBOUND_CBVS
-    uint index = unbounded_cbuffers[zerou+9].index.z;
-#else
-    uint index = zerou+11;
-#endif
-    index = index % 14;
-    unbounded_buffers[index+z][z+2] = write;
-    MyStruct read = unbounded_buffers[index+zerou][zerou+2];
-    return float4(read.b.xyz, read.c);
-  }
-#if UNBOUND_CBVS
-  if(IN.tri == 121)
-  {
-    float4 Color = float4(0,0,0,0);
-    Color.x = float(unbounded_cbuffers[zerou+5].index.x);
-    Color.y = float(unbounded_cbuffers[zerou+6].index.y);
-    Color.z = float(unbounded_cbuffers[zerou+7].index.z);
-    Color.w = float(unbounded_cbuffers[zerou+8].index.w);
-    return Color;
-  }
-#endif // #if UNBOUND_CBVS
-#endif
   return float4(0.4f, 0.4f, 0.4f, 0.4f);
 }
 )EOSHADER";
@@ -1349,9 +1182,9 @@ float4 main(v2f IN) : SV_Target0
   if(IN.tri == 4)
   {
     float4 Color = float4(0,0,0,0);
-    float floatA = zero + 1.5f;
-    float floatB = zero + 1.75f;
-    float floatC = zero + 2.5f;
+    float floatA = IN.tri/100.0 + 1.5f;
+    float floatB = IN.tri/100.0 + 1.7f;
+    float floatC = IN.tri/100.0 + 2.5f;
     DOUBLE doubleA = (DOUBLE)floatA; 
     DOUBLE doubleB = (DOUBLE)floatB;
     DOUBLE doubleC = (DOUBLE)floatC;
@@ -1462,10 +1295,10 @@ float4 main(v2f IN) : SV_Target0
   if(IN.tri == 11)
   {
     float4 Color = float4(0,0,0,0);
-    float3 floatA = float3(zero + 1.5f, zero + 1.75f, zero + 2.75f);
-    float3 floatB = float3(zero - 1.5f, zero + 1.75f, zero - 2.75f);
-    vector<HALF, 3> halfA = {zero + 1.5f, zero + 1.75f, zero + 2.75f};
-    vector<HALF, 3> halfB = {zero - 1.5f, zero - 1.75f, zero - 2.75f};
+    float3 floatA = float3(IN.tri/100.0 + 1.5f, IN.tri/100.0 + 1.7f, IN.tri/100.0 + 2.7f);
+    float3 floatB = float3(IN.tri/100.0 - 1.5f, IN.tri/100.0 + 1.7f, IN.tri/100.0 - 2.7f);
+    vector<HALF, 3> halfA = {IN.tri/100.0 + 1.5f, IN.tri/100.0 + 1.7f, IN.tri/100.0 + 2.7f};
+    vector<HALF, 3> halfB = {IN.tri/100.0 - 1.5f, IN.tri/100.0 - 1.7f, IN.tri/100.0 - 2.7f};
 
     HALF half_val = dot(halfA, halfB);
     float float_val = dot(floatA, floatB);
@@ -1476,10 +1309,10 @@ float4 main(v2f IN) : SV_Target0
   if(IN.tri == 12)
   {
     float4 Color = float4(0,0,0,0);
-    float4 floatA = float4(zero + 1.5f, zero + 1.75f, zero + 2.75f, zero + 3.75f);
-    float4 floatB = float4(zero - 1.5f, zero - 1.75f, zero - 2.75f, zero - 3.75f);
-    vector<HALF, 4> halfA = {zero + 1.5f, zero + 1.75f, zero + 2.75f, zero + 3.75f};
-    vector<HALF, 4> halfB = {zero - 1.5f, zero - 1.75f, zero - 2.75f, zero - 3.75f};
+    float4 floatA = float4(IN.tri/100.0 + 1.5f, IN.tri/100.0 + 1.7f, IN.tri/100.0 + 2.7f, IN.tri/100.0 + 3.7f);
+    float4 floatB = float4(IN.tri/100.0 - 1.5f, IN.tri/100.0 - 1.7f, IN.tri/100.0 - 2.7f, IN.tri/100.0 - 3.7f);
+    vector<HALF, 4> halfA = {IN.tri + 1.5f, IN.tri + 1.7f, IN.tri + 2.7f, IN.tri + 3.7f};
+    vector<HALF, 4> halfB = {IN.tri - 1.5f, IN.tri - 1.7f, IN.tri - 2.7f, IN.tri - 3.7f};
 
     HALF half_val = dot(halfA, halfB);
     float float_val = dot(floatA, floatB);
@@ -1825,11 +1658,7 @@ struct v2f
   float2 uv : TEXCOORD0;
 };
 
-float4 main(v2f IN, uint samp : SV_SampleIndex
-#if SUPPORTS_BARY
-            , float3 bary : SV_Barycentrics
-#endif
-) : SV_Target0 
+float4 main(v2f IN, uint samp : SV_SampleIndex, float3 bary : SV_Barycentrics) : SV_Target0 
 {
   float2 uvCentroid = EvaluateAttributeCentroid(IN.uv);
   float2 uvSamp0 = EvaluateAttributeAtSample(IN.uv, 0) - IN.uv;
@@ -1840,9 +1669,7 @@ float4 main(v2f IN, uint samp : SV_SampleIndex
   float y = (uvSamp0.x + uvSamp0.y) * 0.5f;
   float z = (uvSampThis.x + uvSampThis.y) * 0.5f;
   float w = (uvOffset.x + uvOffset.y) * 0.5f;
-#if SUPPORTS_BARY
   w += x * bary.x + y * bary.y + z * bary.z;
-#endif
 
   // Test sampleinfo with a MSAA rasterizer
   uint numSamples = GetRenderTargetSampleCount();
@@ -1873,11 +1700,6 @@ cbuffer packed_consts : register(b1)
   uint col2w : packoffset(c2.w);
 };
 
-cbuffer oob_consts : register(b2)
-{
-  int4 oob_array[2];
-};
-
 RWStructuredBuffer<uint4> bufIn : register(u0);
 RWStructuredBuffer<uint4> bufOut : register(u1);
 
@@ -1904,9 +1726,6 @@ void main(int3 inTestIndex : SV_GroupID)
   int ONE = ZERO + 1;
 
   int4 testResult = 123;
-  testResult += oob_array[ZERO+2];
-  testResult -= oob_array[ONE+1];
-
   gsmInt = testIndex;
   gsmStruct[gsmInt].a = inTestIndex;
   if (testIndex == 0)
@@ -2089,7 +1908,6 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
 
     bool supportSM60 = (m_HighestShaderModel >= D3D_SHADER_MODEL_6_0) && m_DXILSupport;
     bool supportSM61 = (m_HighestShaderModel >= D3D_SHADER_MODEL_6_1) && m_DXILSupport;
-    bool supportBary = (opts3.BarycentricsSupported) && m_DXILSupport;
     bool supportSM62 = (m_HighestShaderModel >= D3D_SHADER_MODEL_6_2) && m_DXILSupport;
     bool supportSM66 = (m_HighestShaderModel >= D3D_SHADER_MODEL_6_6) && m_DXILSupport;
     TEST_ASSERT(!supportSM62 || supportSM60, "SM 6.2 requires SM 6.0 support");
@@ -2234,20 +2052,6 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
     multiRangeParam.DescriptorTable.NumDescriptorRanges = ARRAY_COUNT(multiRanges);
     multiRangeParam.DescriptorTable.pDescriptorRanges = multiRanges;
 
-    ID3D12RootSignaturePtr sig_5_0 = MakeSig(
-        {
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 0, 8, 0),
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1, 3, 10),
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 100, 5, 20),
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 4, 5, 30),
-            multiRangeParam,
-            uavParam(D3D12_SHADER_VISIBILITY_PIXEL, 0, 21),
-            srvParam(D3D12_SHADER_VISIBILITY_PIXEL, 0, 20),
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 9, 3, 100),
-            srvParam(D3D12_SHADER_VISIBILITY_PIXEL, 0, 21),
-        },
-        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT, 1, &staticSamp);
-
     ID3D12RootSignaturePtr sig = MakeSig(
         {
             tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 0, 8, 0),
@@ -2258,24 +2062,6 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
             uavParam(D3D12_SHADER_VISIBILITY_PIXEL, 0, 21),
             srvParam(D3D12_SHADER_VISIBILITY_PIXEL, 0, 20),
             tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 9, 3, 100),
-            srvParam(D3D12_SHADER_VISIBILITY_PIXEL, 0, 21),
-            // Texture2D<float4> tex2ds[14] : register(t0, space1);
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 14, 150),
-            // SamplerState samplers[14] : register(s0, space1);
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 1, 0, 14, 0),
-            // RWStructuredBuffer<MyStruct> buffers[14] : register(u0, space1);
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 14, 250),
-            // ConstantBuffer<Data> cbuffers[14] : register(b0, space1);
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 14, 300),
-            // Texture2D<float4> unbounded_tex2ds[] : register(t0, space2);
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0, 14, 350),
-            // SamplerState unbounded_samplers[] : register(s0, space2);
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 2, 0, 14,
-                       16),
-            // RWStructuredBuffer<MyStruct> unbounded_buffers[] : register(u0, space2);
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 0, 14, 400),
-            // ConstantBuffer<Data> unbounded_cbuffers[] : register(b0, space2);
-            tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 2, 0, 14, 450),
         },
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT, 1, &staticSamp);
 
@@ -2285,7 +2071,7 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
     ID3DBlobPtr vs5blob = Compile(common + vertex, "main", "vs_5_0");
 
     psos[0] = MakePSO()
-                  .RootSig(sig_5_0)
+                  .RootSig(sig)
                   .InputLayout(inputLayout)
                   .VS(vs5blob)
                   .PS(Compile(common + shaderDefines + pixel, "main", "ps_5_0",
@@ -2294,7 +2080,7 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
     psos[0]->SetName(L"ps_5_0");
     psos[1] =
         MakePSO()
-            .RootSig(sig_5_0)
+            .RootSig(sig)
             .InputLayout(inputLayout)
             .VS(vs5blob)
             .PS(Compile(common + shaderDefines + pixel, "main", "ps_5_0", CompileOptionFlags::None))
@@ -2386,7 +2172,7 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
 
     ID3D12PipelineStatePtr noResPSOs[numShaderModels * 2] = {};
     noResPSOs[0] = MakePSO()
-                       .RootSig(sig_5_0)
+                       .RootSig(sig)
                        .InputLayout(inputLayout)
                        .VS(vs5blob)
                        .PS(Compile(common + noResourcesPixel, "main", "ps_5_0",
@@ -2395,7 +2181,7 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
     noResPSOs[0]->SetName(L"ps_5_0");
     noResPSOs[1] =
         MakePSO()
-            .RootSig(sig_5_0)
+            .RootSig(sig)
             .InputLayout(inputLayout)
             .VS(vs5blob)
             .PS(Compile(common + noResourcesPixel, "main", "ps_5_0", CompileOptionFlags::None))
@@ -2719,81 +2505,23 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
         .NumElements(5)
         .StructureStride(11 * sizeof(float))
         .CreateGPU(35);
-    ID3D12ResourcePtr rootbytesrv = MakeBuffer().Data(structdata);
-    rootbytesrv->SetName(L"rootbytesrv");
-    MakeSRV(rootbytesrv).ByteAddressed().Format(DXGI_FORMAT_R32_TYPELESS).NumElements(16).CreateGPU(37);
     ID3D12ResourcePtr rootDummy = MakeBuffer().Data(structdata);
     rootDummy->SetName(L"rootDummy");
 
     ID3D12ResourcePtr structBuf2 = MakeBuffer().Size(880).UAV();
     structBuf2->SetName(L"structBuf2");
-    D3D12ViewCreator structBuf2View = MakeUAV(structBuf2)
-                                          .Format(DXGI_FORMAT_UNKNOWN)
-                                          .FirstElement(3)
-                                          .NumElements(6)
-                                          .StructureStride(11 * sizeof(float));
-    D3D12_CPU_DESCRIPTOR_HANDLE uav2cpu = structBuf2View.CreateClearCPU(11);
-    D3D12_GPU_DESCRIPTOR_HANDLE uav2gpu = structBuf2View.CreateGPU(11);
+    D3D12ViewCreator uavView2 = MakeUAV(structBuf2)
+                                    .Format(DXGI_FORMAT_UNKNOWN)
+                                    .FirstElement(3)
+                                    .NumElements(6)
+                                    .StructureStride(11 * sizeof(float));
+    D3D12_CPU_DESCRIPTOR_HANDLE uav2cpu = uavView2.CreateClearCPU(11);
+    D3D12_GPU_DESCRIPTOR_HANDLE uav2gpu = uavView2.CreateGPU(11);
 
     // need to create non-structured version for clearing
-    D3D12ViewCreator clearView = MakeUAV(structBuf2).Format(DXGI_FORMAT_R32_UINT);
-    uav2cpu = clearView.CreateClearCPU(9);
-    uav2gpu = clearView.CreateGPU(9);
-
-    // tex2ds[14] GPU Base = 150 Used Indices: 9
-    MakeSRV(smiley).Format(DXGI_FORMAT_R8G8B8A8_UNORM).CreateGPU(150 + 9);
-
-    // samplers[14] GPU Base = 0 Used Indices: 2
-    D3D12_SAMPLER_DESC pointSamplerDesc = {};
-    pointSamplerDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-    pointSamplerDesc.AddressU = pointSamplerDesc.AddressV = pointSamplerDesc.AddressW =
-        D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    UINT increment = dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
-    D3D12_CPU_DESCRIPTOR_HANDLE samplerStart = m_Sampler->GetCPUDescriptorHandleForHeapStart();
-    dev->CreateSampler(&pointSamplerDesc, {samplerStart.ptr + increment * 2});
-
-    // buffers[14] GPU Base = 250 Used Indices: 3
-    structBuf2View.CreateGPU(250 + 3);
-    // cbuffers[14] GPU Base = 300 Used Indices: 1, 2, 3, 4
-    struct Data
-    {
-      Vec4f zeroes;
-      Vec4u index;
-      Vec4f padding[14];
-    };
-    Data data;
-    data.zeroes = Vec4f(0.0f, 0.0f, 0.0f, 0.0f);
-    for(size_t j = 0; j < 14; ++j)
-      data.padding[j] = data.zeroes;
-
-    std::vector<ID3D12ResourcePtr> cbuffers;
-
-    for(uint32_t idx : {1, 2, 3, 4})
-    {
-      data.index = Vec4u(idx * 4 + 1, idx * 4 + 2, idx * 4 + 3, idx * 4 + 4);
-      ID3D12ResourcePtr cbuf = MakeBuffer().Size(16 * sizeof(Data)).Data(&data).Upload();
-      cbuf->SetName((L"cbuffers_" + std::to_wstring(idx)).c_str());
-      MakeCBV(cbuf).SizeBytes(sizeof(Data)).CreateGPU(300 + idx);
-      cbuffers.push_back(cbuf);
-    }
-
-    // unbounded_tex2ds[14] GPU Base = 350 Used Indices: 4
-    MakeSRV(smiley).Format(DXGI_FORMAT_R8G8B8A8_UNORM).CreateGPU(350 + 4);
-
-    // unbounded_samplers[14] GPU Base = 16 Used Indices: 2
-    dev->CreateSampler(&pointSamplerDesc, {samplerStart.ptr + increment * (16 + 2)});
-
-    // unbounded_buffers[14] GPU Base = 400 Used Indices: 11
-    structBuf2View.CreateGPU(400 + 11);
-    // unbounded_cbuffers[14] GPU Base = 450 Used Indices: 3, 5, 6, 7, 8, 9, 11
-    for(uint32_t idx : {3, 5, 6, 7, 8, 9, 11})
-    {
-      data.index = Vec4u(idx * 4 + 1, idx * 4 + 2, idx * 4 + 3, idx * 4 + 4);
-      ID3D12ResourcePtr cbuf = MakeBuffer().Size(16 * sizeof(Data)).Data(&data).Upload();
-      cbuf->SetName((L"unbounded_cbuffers_" + std::to_wstring(idx)).c_str());
-      MakeCBV(cbuf).SizeBytes(sizeof(Data)).CreateGPU(450 + idx);
-      cbuffers.push_back(cbuf);
-    }
+    uavView2 = MakeUAV(structBuf2).Format(DXGI_FORMAT_R32_UINT);
+    uav2cpu = uavView2.CreateClearCPU(9);
+    uav2gpu = uavView2.CreateGPU(9);
 
     // Create resources for MSAA draw
     ID3DBlobPtr vsmsaablob = Compile(D3DDefaultVertex, "main", "vs_5_0");
@@ -2822,16 +2550,11 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
 
       if(supportSM61)
       {
-        std::string defines = "#define SUPPORTS_BARY ";
-
-        defines += supportBary ? "1" : "0";
-        defines += "\n";
-
         msaaPSOs[2] = MakePSO()
                           .RootSig(sigmsaa)
                           .InputLayout()
                           .VS(Compile(D3DDefaultVertex, "main", "vs_6_1"))
-                          .PS(Compile(defines + msaaPixel61, "main", "ps_6_1"))
+                          .PS(Compile(msaaPixel61, "main", "ps_6_1"))
                           .SampleCount(4)
                           .RTVs({DXGI_FORMAT_R32G32B32A32_FLOAT});
       }
@@ -2946,9 +2669,8 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
     ID3D12RootSignaturePtr sigCompute = MakeSig({
         uavParam(D3D12_SHADER_VISIBILITY_ALL, 0, 0),
         uavParam(D3D12_SHADER_VISIBILITY_ALL, 0, 1),
-        constParam(D3D12_SHADER_VISIBILITY_ALL, 0, 0, 8),
+        constParam(D3D12_SHADER_VISIBILITY_ALL, 0, 0, 4),
         constParam(D3D12_SHADER_VISIBILITY_ALL, 0, 1, 12),
-        constParam(D3D12_SHADER_VISIBILITY_ALL, 0, 2, 12),
         tableParam(D3D12_SHADER_VISIBILITY_ALL, D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 2, 1, 3),
     });
 
@@ -3139,13 +2861,8 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
           IASetVertexBuffer(cmd, vb, sizeof(ConstsA2V), 0);
           cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-          if(i < 2)
-            cmd->SetGraphicsRootSignature(sig_5_0);
-          else
-            cmd->SetGraphicsRootSignature(sig);
-          ID3D12DescriptorHeap *heaps[] = {m_CBVUAVSRV.GetInterfacePtr(),
-                                           m_Sampler.GetInterfacePtr()};
-          cmd->SetDescriptorHeaps(2, heaps);
+          cmd->SetGraphicsRootSignature(sig);
+          cmd->SetDescriptorHeaps(1, &m_CBVUAVSRV.GetInterfacePtr());
           cmd->SetGraphicsRootDescriptorTable(0, m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
           cmd->SetGraphicsRootDescriptorTable(1, m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
           cmd->SetGraphicsRootDescriptorTable(2, m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
@@ -3155,24 +2872,6 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
           cmd->SetGraphicsRootShaderResourceView(
               6, rootStruct->GetGPUVirtualAddress() + renderDataSize);
           cmd->SetGraphicsRootDescriptorTable(7, m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
-          cmd->SetGraphicsRootShaderResourceView(
-              8, rootbytesrv->GetGPUVirtualAddress() + renderDataSize);
-          if(i >= 2)
-          {
-            cmd->SetGraphicsRootDescriptorTable(9, m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
-            cmd->SetGraphicsRootDescriptorTable(10, m_Sampler->GetGPUDescriptorHandleForHeapStart());
-            cmd->SetGraphicsRootDescriptorTable(11,
-                                                m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
-            cmd->SetGraphicsRootDescriptorTable(12,
-                                                m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
-            cmd->SetGraphicsRootDescriptorTable(13,
-                                                m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
-            cmd->SetGraphicsRootDescriptorTable(14, m_Sampler->GetGPUDescriptorHandleForHeapStart());
-            cmd->SetGraphicsRootDescriptorTable(15,
-                                                m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
-            cmd->SetGraphicsRootDescriptorTable(16,
-                                                m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
-          }
 
           // Add a marker so we can easily locate this draw
           std::string markerName = markers[i];
@@ -3313,19 +3012,7 @@ void main(uint3 inDTID : SV_DispatchThreadID, uint3 inGID : SV_GroupThreadID, ui
         cmd->SetComputeRoot32BitConstant(2, 8, 3);
         cmd->SetComputeRoot32BitConstant(3, 10, 4 + 2);    // col1z
         cmd->SetComputeRoot32BitConstant(3, 11, 8 + 3);    // col2w
-        cmd->SetComputeRoot32BitConstant(4, 12, 0 + 0);    // oob_array[0].x
-        cmd->SetComputeRoot32BitConstant(4, 13, 0 + 1);    // oob_array[0].y
-        cmd->SetComputeRoot32BitConstant(4, 14, 0 + 2);    // oob_array[0].z
-        cmd->SetComputeRoot32BitConstant(4, 15, 0 + 3);    // oob_array[0].w
-        cmd->SetComputeRoot32BitConstant(4, 16, 4 + 0);    // oob_array[1].x
-        cmd->SetComputeRoot32BitConstant(4, 17, 4 + 1);    // oob_array[1].y
-        cmd->SetComputeRoot32BitConstant(4, 18, 4 + 2);    // oob_array[1].z
-        cmd->SetComputeRoot32BitConstant(4, 19, 4 + 3);    // oob_array[1].w
-        cmd->SetComputeRoot32BitConstant(4, 20, 8 + 0);    // oob_array[2].x
-        cmd->SetComputeRoot32BitConstant(4, 21, 8 + 1);    // oob_array[2].y
-        cmd->SetComputeRoot32BitConstant(4, 22, 8 + 2);    // oob_array[2].z
-        cmd->SetComputeRoot32BitConstant(4, 23, 8 + 3);    // oob_array[2].w
-        cmd->SetComputeRootDescriptorTable(5, m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
+        cmd->SetComputeRootDescriptorTable(4, m_CBVUAVSRV->GetGPUDescriptorHandleForHeapStart());
 
         cmd->SetPipelineState(computePSOs[i]);
         setMarker(cmd, computeSMs[i]);

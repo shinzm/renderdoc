@@ -100,15 +100,13 @@ struct DescriptorTemplateRefs
                          entry.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ||
                          entry.descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT);
 
-        const DescSetLayout::Binding *layoutBinding = &tempInfo->layout.bindings[entry.dstBinding];
-
         for(uint32_t d = 0; d < entry.descriptorCount; d++)
         {
           memcpy(dst, src, sizeof(VkDescriptorImageInfo));
 
           VkDescriptorImageInfo *info = (VkDescriptorImageInfo *)dst;
 
-          if(hasSampler && layoutBinding->immutableSampler == NULL && info->sampler != VK_NULL_HANDLE)
+          if(hasSampler && info->sampler != VK_NULL_HANDLE)
           {
             frameRefs.push_back(make_rdcpair(GetResID(info->sampler), eFrameRef_Read));
             info->sampler = Unwrap(info->sampler);
@@ -426,13 +424,17 @@ void WrappedVulkan::AddImplicitResolveResourceUsage(uint32_t subpass)
     if(attIdx == VK_ATTACHMENT_UNUSED)
       continue;
     ResourceId image = m_CreationInfo.m_ImageView[fbattachments[attIdx]].image;
-    m_LoadingEventNode.resourceUsage.push_back(make_rdcpair(image, ResourceUsage::ResolveDst));
+    m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+        image,
+        EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID, ResourceUsage::ResolveDst)));
 
     attIdx = rpinfo.subpasses[subpass].colorAttachments[i];
     if(attIdx == VK_ATTACHMENT_UNUSED)
       continue;
     image = m_CreationInfo.m_ImageView[fbattachments[attIdx]].image;
-    m_LoadingEventNode.resourceUsage.push_back(make_rdcpair(image, ResourceUsage::ResolveSrc));
+    m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+        image,
+        EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID, ResourceUsage::ResolveSrc)));
   }
 
   // also add any discards on the final subpass
@@ -443,7 +445,9 @@ void WrappedVulkan::AddImplicitResolveResourceUsage(uint32_t subpass)
       if(rpinfo.attachments[i].storeOp == VK_ATTACHMENT_STORE_OP_DONT_CARE)
       {
         ResourceId image = m_CreationInfo.m_ImageView[fbattachments[i]].image;
-        m_LoadingEventNode.resourceUsage.push_back(make_rdcpair(image, ResourceUsage::Discard));
+        m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+            image,
+            EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID, ResourceUsage::Discard)));
       }
     }
   }
@@ -1667,17 +1671,7 @@ bool WrappedVulkan::Serialise_vkBeginCommandBuffer(SerialiserType &ser, VkComman
         // (even if it's baked to several command buffers in the frame)
         // there's no issue with clashes here.
         m_RerecordCmds[BakedCommandBuffer] = cmd;
-        // we don't mark CommandBuffer as a rerecord command. The reason for this is in case
-        // applications do bad things and re-record and submit the same command buffer multiple
-        // times in a capture. In that event we could create a problem - when selecting a
-        // vkBeginCommandBuffer in a second submission of the same command buffer (baked twice) the
-        // command buffer ID that will come back will be the non-baked command buffer ID. If that is
-        // considered a re-record command buffer then we could submit events to that command buffer
-        // without having begun it.
-        //
-        // This only happens with an application that records and submits the same command buffer multiple
-        // times. If an application does the proper thing and records multiple command buffers then
-        // they will have a unique base command buffer ID and there is no risk of false-aliasing.
+        m_RerecordCmds[CommandBuffer] = cmd;
         InsertCommandQueueFamily(BakedCommandBuffer, FindCommandQueueFamily(CommandBuffer));
 
         m_RerecordCmdList.push_back({AllocateInfo.commandPool, cmd});
@@ -1698,16 +1692,6 @@ bool WrappedVulkan::Serialise_vkBeginCommandBuffer(SerialiserType &ser, VkComman
 
           m_BakedCmdBufferInfo[BakedCommandBuffer].state.dynamicRendering.localRead.Init(
               (const VkBaseInStructure *)BeginInfo.pInheritanceInfo);
-
-          VkCommandBufferInheritanceRenderingInfo *dynRenderingInherit =
-              (VkCommandBufferInheritanceRenderingInfo *)FindNextStruct(
-                  BeginInfo.pInheritanceInfo,
-                  VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO);
-
-          if(dynRenderingInherit)
-          {
-            m_BakedCmdBufferInfo[BakedCommandBuffer].state.dynamicRendering.active = VK_TRUE;
-          }
         }
 
         ObjDisp(cmd)->BeginCommandBuffer(Unwrap(cmd), &unwrappedBeginInfo);
@@ -1777,13 +1761,20 @@ bool WrappedVulkan::Serialise_vkBeginCommandBuffer(SerialiserType &ser, VkComman
       m_RerecordCmdList.push_back({AllocateInfo.commandPool, cmd});
 
       // propagate any name there might be
-      ResourceDescription &descr = GetResourceDesc(CommandBuffer);
-      if(!descr.autogeneratedName)
-        GetResourceDesc(BakedCommandBuffer).SetCustomName(descr.name + " (Baked)");
+      if(m_CreationInfo.m_Names.find(CommandBuffer) != m_CreationInfo.m_Names.end())
+        m_CreationInfo.m_Names[BakedCommandBuffer] = m_CreationInfo.m_Names[CommandBuffer];
 
       {
+        VulkanActionTreeNode *action = new VulkanActionTreeNode;
+        m_BakedCmdBufferInfo[BakedCommandBuffer].action = action;
+
+        // On queue submit we increment all child events/actions by
+        // m_RootEventID and insert them into the tree.
         m_BakedCmdBufferInfo[BakedCommandBuffer].curEventID = 0;
         m_BakedCmdBufferInfo[BakedCommandBuffer].eventCount = 0;
+        m_BakedCmdBufferInfo[BakedCommandBuffer].actionCount = 0;
+
+        m_BakedCmdBufferInfo[BakedCommandBuffer].actionStack.push_back(action);
 
         m_BakedCmdBufferInfo[BakedCommandBuffer].beginChunk =
             uint32_t(m_StructuredFile->chunks.size() - 1);
@@ -1994,7 +1985,13 @@ bool WrappedVulkan::Serialise_vkEndCommandBuffer(SerialiserType &ser, VkCommandB
       ObjDisp(commandBuffer)->EndCommandBuffer(Unwrap(commandBuffer));
 
       {
-        m_BakedCmdBufferInfo[BakedCommandBuffer].eventCount = 0;
+        if(GetActionStack().size() > 1)
+          GetActionStack().pop_back();
+      }
+
+      {
+        m_BakedCmdBufferInfo[BakedCommandBuffer].eventCount =
+            m_BakedCmdBufferInfo[BakedCommandBuffer].curEventID;
         m_BakedCmdBufferInfo[BakedCommandBuffer].curEventID = 0;
 
         m_BakedCmdBufferInfo[BakedCommandBuffer].endChunk =
@@ -2002,6 +1999,7 @@ bool WrappedVulkan::Serialise_vkEndCommandBuffer(SerialiserType &ser, VkCommandB
 
         m_BakedCmdBufferInfo[CommandBuffer].curEventID = 0;
         m_BakedCmdBufferInfo[CommandBuffer].eventCount = 0;
+        m_BakedCmdBufferInfo[CommandBuffer].actionCount = 0;
       }
     }
   }
@@ -2312,10 +2310,12 @@ bool WrappedVulkan::Serialise_vkCmdBeginRenderPass(SerialiserType &ser, VkComman
            rpinfo.attachments[i].loadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
         {
           ResourceId image = m_CreationInfo.m_ImageView[fbattachments[i]].image;
-          m_LoadingEventNode.resourceUsage.push_back(
-              make_rdcpair(image, rpinfo.attachments[i].loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR
-                                      ? ResourceUsage::Clear
-                                      : ResourceUsage::Discard));
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+              image, EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID,
+                                rpinfo.attachments[i].loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR
+                                    ? ResourceUsage::Clear
+                                    : ResourceUsage::Discard,
+                                fbattachments[i])));
         }
       }
 
@@ -2932,10 +2932,12 @@ bool WrappedVulkan::Serialise_vkCmdBeginRenderPass2(SerialiserType &ser,
            rpinfo.attachments[i].loadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
         {
           ResourceId image = m_CreationInfo.m_ImageView[fbattachments[i]].image;
-          m_LoadingEventNode.resourceUsage.push_back(
-              make_rdcpair(image, rpinfo.attachments[i].loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR
-                                      ? ResourceUsage::Clear
-                                      : ResourceUsage::Discard));
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+              image, EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID,
+                                rpinfo.attachments[i].loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR
+                                    ? ResourceUsage::Clear
+                                    : ResourceUsage::Discard,
+                                fbattachments[i])));
         }
       }
 
@@ -3469,8 +3471,6 @@ bool WrappedVulkan::Serialise_vkCmdBindPipeline(SerialiserType &ser, VkCommandBu
               renderstate.bias.depth = pipeInfo.depthBiasConstantFactor;
               renderstate.bias.biasclamp = pipeInfo.depthBiasClamp;
               renderstate.bias.slope = pipeInfo.depthBiasSlopeFactor;
-              renderstate.bias.exact = pipeInfo.depthBiasExact != VK_FALSE;
-              renderstate.bias.repr = pipeInfo.depthBiasRepresentation;
             }
             if(!pipeInfo.dynamicStates[VkDynamicBlendConstants])
             {
@@ -4599,8 +4599,9 @@ bool WrappedVulkan::Serialise_vkCmdPipelineBarrier(
 
         if(IsLoading(m_State))
         {
-          m_LoadingEventNode.resourceUsage.push_back(
-              make_rdcpair(GetResID(pBufferMemoryBarriers[i].buffer), ResourceUsage::Barrier));
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+              GetResID(pBufferMemoryBarriers[i].buffer),
+              EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID, ResourceUsage::Barrier)));
         }
       }
     }
@@ -4617,8 +4618,9 @@ bool WrappedVulkan::Serialise_vkCmdPipelineBarrier(
 
         if(IsLoading(m_State))
         {
-          m_LoadingEventNode.resourceUsage.push_back(
-              make_rdcpair(GetResID(pImageMemoryBarriers[i].image), ResourceUsage::Barrier));
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+              GetResID(pImageMemoryBarriers[i].image),
+              EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID, ResourceUsage::Barrier)));
         }
       }
     }
@@ -4640,8 +4642,9 @@ bool WrappedVulkan::Serialise_vkCmdPipelineBarrier(
           VulkanCreationInfo::Image &imgInfo = m_CreationInfo.m_Image[GetResID(b.image)];
           if(!imgInfo.external)
           {
-            m_LoadingEventNode.resourceUsage.push_back(
-                make_rdcpair(GetResID(b.image), ResourceUsage::Discard));
+            m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+                GetResID(b.image), EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID,
+                                              ResourceUsage::Discard)));
           }
         }
       }
@@ -4847,8 +4850,9 @@ bool WrappedVulkan::Serialise_vkCmdPipelineBarrier2(SerialiserType &ser,
 
         if(IsLoading(m_State))
         {
-          m_LoadingEventNode.resourceUsage.push_back(make_rdcpair(
-              GetResID(DependencyInfo.pBufferMemoryBarriers[i].buffer), ResourceUsage::Barrier));
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+              GetResID(DependencyInfo.pBufferMemoryBarriers[i].buffer),
+              EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID, ResourceUsage::Barrier)));
         }
       }
     }
@@ -4865,8 +4869,9 @@ bool WrappedVulkan::Serialise_vkCmdPipelineBarrier2(SerialiserType &ser,
 
         if(IsLoading(m_State))
         {
-          m_LoadingEventNode.resourceUsage.push_back(make_rdcpair(
-              GetResID(DependencyInfo.pImageMemoryBarriers[i].image), ResourceUsage::Barrier));
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+              GetResID(DependencyInfo.pImageMemoryBarriers[i].image),
+              EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID, ResourceUsage::Barrier)));
         }
       }
     }
@@ -4896,8 +4901,9 @@ bool WrappedVulkan::Serialise_vkCmdPipelineBarrier2(SerialiserType &ser,
           VulkanCreationInfo::Image &imgInfo = m_CreationInfo.m_Image[GetResID(b.image)];
           if(!imgInfo.external)
           {
-            m_LoadingEventNode.resourceUsage.push_back(
-                make_rdcpair(GetResID(b.image), ResourceUsage::Discard));
+            m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+                GetResID(b.image), EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID,
+                                              ResourceUsage::Discard)));
           }
         }
       }
@@ -5399,37 +5405,11 @@ void WrappedVulkan::UpdateRenderStateForSecondaries(BakedCmdBufferInfo &ancestor
   currentCB.state.renderArea = ancestorCB.state.renderArea;
   currentCB.state.subpassContents = ancestorCB.state.subpassContents;
 
-  for(const ResourceId &childCB : currentCB.executedCmds)
-    UpdateRenderStateForSecondaries(ancestorCB, m_BakedCmdBufferInfo[childCB]);
-}
-
-void WrappedVulkan::ResetRenderStateForParent(BakedCmdBufferInfo &ancestorCB)
-{
-  // All state of the primary command buffer is undefined after executing a secondary command buffer
-  VulkanRenderState &state = ancestorCB.state;
-
-  // Except: If the primary command buffer is inside a render pass instance, then the
-  // render pass and subpass state is not disturbed by executing secondary command buffers.
-  ResourceId rp = state.GetRenderPass();
-  uint32_t subpass = state.subpass;
-  VkSubpassContents subpassContents = state.subpassContents;
-  ResourceId fb = state.GetFramebuffer();
-  VkRect2D renderArea = state.renderArea;
-  rdcarray<ResourceId> fbAtts = state.GetFramebufferAttachments();
-
-  state = VulkanRenderState();
-
-  state.SetRenderPass(rp);
-  state.subpass = subpass;
-  state.subpassContents = subpassContents;
-  state.renderArea = renderArea;
-  state.SetFramebuffer(fb, fbAtts);
-
-  // Not Implemented
-  // Except: If the primary command buffer has a descriptor heap bound, and the address of that
-  // descriptor heap is specified in VkCommandBufferInheritanceDescriptorHeapInfoEXT for
-  // every secondary command buffer, that heap binding is not disturbed by executing
-  // secondary command buffers.
+  if(currentCB.action)
+  {
+    for(const ResourceId &childCB : currentCB.action->executedCmds)
+      UpdateRenderStateForSecondaries(ancestorCB, m_BakedCmdBufferInfo[childCB]);
+  }
 }
 
 template <typename SerialiserType>
@@ -5482,12 +5462,10 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
 
       BakedCmdBufferInfo &parentCmdBufInfo = m_BakedCmdBufferInfo[m_LastCmdBufferID];
 
-      bool parentActiveRenderPass = parentCmdBufInfo.state.ActiveRenderPass();
-      parentActiveRenderPass |=
-          ((parentCmdBufInfo.beginFlags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) != 0);
+      parentCmdBufInfo.curEventID++;
 
       // should we add framebuffer usage to the child draws.
-      bool framebufferUsage = parentActiveRenderPass;
+      bool framebufferUsage = parentCmdBufInfo.state.ActiveRenderPass();
 
       for(uint32_t c = 0; c < commandBufferCount; c++)
       {
@@ -5503,14 +5481,13 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
             ActionFlags::CommandBufferBoundary | ActionFlags::PassBoundary | ActionFlags::BeginPass;
         AddEvent();
 
-        AddAction(marker);
-        VulkanEventNode &beginNode = GetLastEventNode();
-        beginNode.event.chunkIndex = cmdBufInfo.beginChunk;
-        beginNode.startChildExecute = true;
-        beginNode.cmdBufId = m_LastCmdBufferID;
-        beginNode.childCmdBufId = cmd;
+        parentCmdBufInfo.curEvents.back().chunkIndex = cmdBufInfo.beginChunk;
 
-        if(!parentActiveRenderPass &&
+        AddAction(marker);
+        parentCmdBufInfo.curEventID++;
+
+        if(m_BakedCmdBufferInfo[m_LastCmdBufferID].state.GetRenderPass() == ResourceId() &&
+           !m_BakedCmdBufferInfo[m_LastCmdBufferID].state.dynamicRendering.active &&
            (cmdBufInfo.beginFlags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT))
         {
           AddDebugMessage(
@@ -5518,22 +5495,55 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
               "Executing a command buffer with RENDER_PASS_CONTINUE_BIT outside of render pass");
         }
 
-        // append the executed command buffer nodes into the parent
-        size_t startNode = parentCmdBufInfo.eventNodes.size();
-        parentCmdBufInfo.eventNodes.append(cmdBufInfo.eventNodes);
-        size_t countChild = cmdBufInfo.eventNodes.size();
-        cmdBufInfo.eventCount = (uint32_t)countChild;
+        // insert the baked command buffer in-line into this list of notes, assigning new event and
+        // drawIDs
+        parentCmdBufInfo.action->InsertAndUpdateIDs(*cmdBufInfo.action, parentCmdBufInfo.curEventID,
+                                                    parentCmdBufInfo.actionCount);
 
         if(framebufferUsage)
         {
+          size_t total = parentCmdBufInfo.action->children.size();
+          size_t numChildren = cmdBufInfo.action->children.size();
+
           // iterate through the newly added draws, and recursively add usage to them using our
           // primary command buffer's state
-          for(size_t i = 0; i < countChild; ++i)
-            AddFramebufferUsage(parentCmdBufInfo.eventNodes[startNode + i], parentCmdBufInfo.state);
+          for(size_t i = 0; i < numChildren; i++)
+          {
+            AddFramebufferUsageAllChildren(
+                parentCmdBufInfo.action->children[total - numChildren + i], parentCmdBufInfo.state);
+          }
+        }
+
+        for(size_t i = 0; i < cmdBufInfo.debugMessages.size(); i++)
+        {
+          parentCmdBufInfo.debugMessages.push_back(cmdBufInfo.debugMessages[i]);
+          parentCmdBufInfo.debugMessages.back().eventId += parentCmdBufInfo.curEventID;
         }
 
         // Record execution of the secondary command buffer in the parent's CommandBufferNode
-        parentCmdBufInfo.executedCmds.push_back(cmd);
+        // Only primary command buffers can be submitted
+        CommandBufferExecuteInfo execInfo;
+        execInfo.cmdId = cmd;
+        execInfo.relPos = parentCmdBufInfo.curEventID;
+
+        m_CommandBufferExecutes[m_LastCmdBufferID].push_back(execInfo);
+
+        parentCmdBufInfo.action->executedCmds.push_back(cmd);
+
+        parentCmdBufInfo.curEventID += cmdBufInfo.eventCount;
+        parentCmdBufInfo.actionCount += cmdBufInfo.actionCount;
+
+        // pull in any remaining events on the command buffer that weren't added to an action
+        uint32_t i = 0;
+        for(APIEvent &apievent : cmdBufInfo.curEvents)
+        {
+          apievent.eventId = parentCmdBufInfo.curEventID - cmdBufInfo.curEvents.count() + i;
+
+          parentCmdBufInfo.curEvents.push_back(apievent);
+          i++;
+        }
+
+        cmdBufInfo.curEvents.clear();
 
         marker.customName = StringFormat::Fmt(
             "=> vkCmdExecuteCommands()[%u]: vkEndCommandBuffer(%s)", c, ToStr(cmd).c_str());
@@ -5541,10 +5551,7 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
             ActionFlags::CommandBufferBoundary | ActionFlags::PassBoundary | ActionFlags::EndPass;
         AddEvent();
         AddAction(marker);
-
-        VulkanEventNode &endNode = GetLastEventNode();
-        endNode.endChildExecute = true;
-        endNode.childCmdBufId = cmd;
+        parentCmdBufInfo.curEventID++;
       }
 
       // add an extra pop marker
@@ -5559,7 +5566,6 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
       // because we don't have the extra popmarker event to 'absorb' the outer loop's
       // increment, and it incremented once too many for the last vkEndCommandBuffer
       // setmarker event in the loop over all commands
-      ResetRenderStateForParent(parentCmdBufInfo);
     }
     else
     {
@@ -5690,20 +5696,16 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
               auto it = std::lower_bound(m_ActionUses.begin(), m_ActionUses.end(), use);
               if(it != m_ActionUses.end())
               {
-                // Skip over the vkCmdExecuteCommands
-                uint32_t eventId = it->eventId + 1;
+                uint32_t eventId = it->eventId + 2;
 
                 for(uint32_t i = 0; i < (uint32_t)rerecordedCmds.size(); i++)
                 {
                   ResourceId cmd = GetResID(pCommandBuffers[i]);
                   BakedCmdBufferInfo &info = m_BakedCmdBufferInfo[cmd];
-                  uint32_t eventCount = info.eventCount;
-                  // Skip over the virtual marker vkBeginCommandBuffer
-                  uint32_t firstEventId = eventId + 1;
-                  // firstEventId -> lastEventId is an inclusive range
-                  uint32_t lastEventId = firstEventId + eventCount - 1;
-                  if(eventCount > 0)
+                  if(info.action && info.action->children.size() > 0)
                   {
+                    uint32_t firstEventId = eventId + info.action->children.front().action.eventId;
+                    uint32_t lastEventId = eventId + info.action->children.back().action.eventId;
                     m_ActionCallback->PreCmdExecute(eventId, firstEventId, lastEventId,
                                                     commandBuffer);
                     ObjDisp(commandBuffer)
@@ -5717,8 +5719,7 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
                         ->CmdExecuteCommands(Unwrap(commandBuffer), 1, &rerecordedCmds[i]);
                   }
 
-                  // Skip over the final event and virtual marker vkEndCommandBuffer
-                  eventId = lastEventId + 2;
+                  eventId += 2 + m_BakedCmdBufferInfo[cmd].eventCount;
                 }
               }
             }
@@ -5728,7 +5729,6 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
                   ->CmdExecuteCommands(Unwrap(commandBuffer), (uint32_t)rerecordedCmds.size(),
                                        rerecordedCmds.data());
             }
-            ResetRenderStateForParent(parentCmdBufInfo);
           }
         }
       }
@@ -7922,9 +7922,11 @@ bool WrappedVulkan::Serialise_vkCmdBeginRendering(SerialiserType &ser, VkCommand
            att->loadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
         {
           ResourceId image = m_CreationInfo.m_ImageView[GetResID(att->imageView)].image;
-          m_LoadingEventNode.resourceUsage.push_back(make_rdcpair(
-              image, att->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR ? ResourceUsage::Clear
-                                                                : ResourceUsage::Discard));
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(make_rdcpair(
+              image, EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID,
+                                att->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR ? ResourceUsage::Clear
+                                                                           : ResourceUsage::Discard,
+                                GetResID(att->imageView))));
         }
       }
 
@@ -8028,7 +8030,7 @@ void WrappedVulkan::vkCmdBeginRendering(VkCommandBuffer commandBuffer,
       }
 
       record->MarkImageViewFrameReferenced(viewRecord, ImageRange(), refType);
-      if(att->resolveMode && att->resolveImageView != VK_NULL_HANDLE)
+      if(att->resolveMode)
         record->MarkImageViewFrameReferenced(GetRecord(att->resolveImageView), ImageRange(), refType);
     }
   }
@@ -8223,7 +8225,9 @@ bool WrappedVulkan::Serialise_vkCmdEndRendering(SerialiserType &ser, VkCommandBu
 
       VulkanRenderState &state = m_BakedCmdBufferInfo[m_LastCmdBufferID].state;
 
-      rdcarray<rdcpair<ResourceId, ResourceUsage>> &usage = m_LoadingEventNode.resourceUsage;
+      uint32_t eid = m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID;
+      rdcarray<rdcpair<ResourceId, EventUsage>> &usage =
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage;
 
       VulkanRenderState::DynamicRendering &dyn = state.dynamicRendering;
 
@@ -8244,18 +8248,18 @@ bool WrappedVulkan::Serialise_vkCmdEndRendering(SerialiserType &ser, VkCommandBu
            dynAtts[i].imageView != VK_NULL_HANDLE && dynAtts[i].resolveImageView != VK_NULL_HANDLE)
         {
           usage.push_back(make_rdcpair(m_CreationInfo.m_ImageView[GetResID(dynAtts[i].imageView)].image,
-                                       ResourceUsage::ResolveSrc));
+                                       EventUsage(eid, ResourceUsage::ResolveSrc)));
 
           usage.push_back(
               make_rdcpair(m_CreationInfo.m_ImageView[GetResID(dynAtts[i].resolveImageView)].image,
-                           ResourceUsage::ResolveDst));
+                           EventUsage(eid, ResourceUsage::ResolveDst)));
         }
 
         // also add any discards
         if(dynAtts[i].storeOp == VK_ATTACHMENT_STORE_OP_DONT_CARE)
         {
           usage.push_back(make_rdcpair(m_CreationInfo.m_ImageView[GetResID(dynAtts[i].imageView)].image,
-                                       ResourceUsage::Discard));
+                                       EventUsage(eid, ResourceUsage::Discard)));
         }
       }
 
@@ -8509,7 +8513,9 @@ bool WrappedVulkan::Serialise_vkCmdEndRendering2EXT(SerialiserType &ser,
 
       VulkanRenderState &state = m_BakedCmdBufferInfo[m_LastCmdBufferID].state;
 
-      rdcarray<rdcpair<ResourceId, ResourceUsage>> &usage = m_LoadingEventNode.resourceUsage;
+      uint32_t eid = m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID;
+      rdcarray<rdcpair<ResourceId, EventUsage>> &usage =
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage;
 
       VulkanRenderState::DynamicRendering &dyn = state.dynamicRendering;
 
@@ -8530,18 +8536,18 @@ bool WrappedVulkan::Serialise_vkCmdEndRendering2EXT(SerialiserType &ser,
            dynAtts[i].imageView != VK_NULL_HANDLE && dynAtts[i].resolveImageView != VK_NULL_HANDLE)
         {
           usage.push_back(make_rdcpair(m_CreationInfo.m_ImageView[GetResID(dynAtts[i].imageView)].image,
-                                       ResourceUsage::ResolveSrc));
+                                       EventUsage(eid, ResourceUsage::ResolveSrc)));
 
           usage.push_back(
               make_rdcpair(m_CreationInfo.m_ImageView[GetResID(dynAtts[i].resolveImageView)].image,
-                           ResourceUsage::ResolveDst));
+                           EventUsage(eid, ResourceUsage::ResolveDst)));
         }
 
         // also add any discards
         if(dynAtts[i].storeOp == VK_ATTACHMENT_STORE_OP_DONT_CARE)
         {
           usage.push_back(make_rdcpair(m_CreationInfo.m_ImageView[GetResID(dynAtts[i].imageView)].image,
-                                       ResourceUsage::Discard));
+                                       EventUsage(eid, ResourceUsage::Discard)));
         }
       }
 
@@ -10404,7 +10410,9 @@ bool WrappedVulkan::Serialise_vkCmdBeginCustomResolveEXT(
           renderstate.dynamicRendering.color[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
           ResourceId image = m_CreationInfo.m_ImageView[resolveImageView].image;
-          m_LoadingEventNode.resourceUsage.push_back(make_rdcpair(image, ResourceUsage::Discard));
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(
+              make_rdcpair(image, EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID,
+                                             ResourceUsage::Discard, resolveImageView)));
         }
         else
         {
@@ -10445,771 +10453,6 @@ void WrappedVulkan::vkCmdBeginCustomResolveEXT(
     Serialise_vkCmdBeginCustomResolveEXT(ser, commandBuffer, pBeginCustomResolveInfo);
 
     record->AddChunk(scope.Get(&record->cmdInfo->alloc));
-  }
-}
-
-template <typename SerialiserType>
-bool WrappedVulkan::Serialise_vkCmdSetCheckpointNV(SerialiserType &ser, VkCommandBuffer commandBuffer,
-                                                   const void *pCheckpointMarker)
-{
-  SERIALISE_ELEMENT(commandBuffer);
-  SERIALISE_ELEMENT_LOCAL(marker, (uint64_t)(uintptr_t)pCheckpointMarker)
-      .Important()
-      .OffsetOrSize()
-      .Named("pCheckpointMarker")
-      .TypedAs("void *"_lit);
-
-  if(IsReplayingAndReading())
-  {
-    m_LastCmdBufferID = GetResID(commandBuffer);
-
-    if(IsActiveReplaying(m_State))
-    {
-      if(InRerecordRange(m_LastCmdBufferID))
-        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
-      else
-        commandBuffer = VK_NULL_HANDLE;
-    }
-
-    if(commandBuffer != VK_NULL_HANDLE)
-    {
-      ObjDisp(commandBuffer)->CmdSetCheckpointNV(Unwrap(commandBuffer), (void *)(uintptr_t)marker);
-    }
-  }
-  return true;
-}
-
-void WrappedVulkan::vkCmdSetCheckpointNV(VkCommandBuffer commandBuffer, const void *pCheckpointMarker)
-{
-  SCOPED_DBG_SINK();
-
-  SERIALISE_TIME_CALL(
-      ObjDisp(commandBuffer)->CmdSetCheckpointNV(Unwrap(commandBuffer), pCheckpointMarker));
-
-  if(IsCaptureMode(m_State))
-  {
-    VkResourceRecord *record = GetRecord(commandBuffer);
-
-    CACHE_THREAD_SERIALISER();
-    ser.SetActionChunk();
-    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdSetCheckpointNV);
-    Serialise_vkCmdSetCheckpointNV(ser, commandBuffer, pCheckpointMarker);
-
-    record->AddChunk(scope.Get(&record->cmdInfo->alloc));
-  }
-}
-
-template <typename SerialiserType>
-bool WrappedVulkan::Serialise_vkCmdBindIndexBuffer3KHR(SerialiserType &ser,
-                                                       VkCommandBuffer commandBuffer,
-                                                       const VkBindIndexBuffer3InfoKHR *pInfo)
-{
-  SERIALISE_ELEMENT(commandBuffer);
-  SERIALISE_ELEMENT_LOCAL(Info, *pInfo).Important();
-
-  Serialise_DebugMessages(ser);
-
-  SERIALISE_CHECK_READ_ERRORS();
-
-  if(IsReplayingAndReading())
-  {
-    m_LastCmdBufferID = GetResID(commandBuffer);
-
-    if(IsActiveReplaying(m_State))
-    {
-      if(InRerecordRange(m_LastCmdBufferID))
-      {
-        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
-        ObjDisp(commandBuffer)->CmdBindIndexBuffer3KHR(Unwrap(commandBuffer), &Info);
-
-        {
-          VulkanRenderState &renderstate = GetCmdRenderState();
-          GetResIDFromAddr(Info.addressRange.address, renderstate.ibuffer.buf,
-                           renderstate.ibuffer.offs);
-          renderstate.ibuffer.size = Info.addressRange.size;
-
-          if(Info.indexType == VK_INDEX_TYPE_UINT32)
-            renderstate.ibuffer.bytewidth = 4;
-          else if(Info.indexType == VK_INDEX_TYPE_UINT8)
-            renderstate.ibuffer.bytewidth = 1;
-          else
-            renderstate.ibuffer.bytewidth = 2;
-        }
-      }
-    }
-    else
-    {
-      // track while reading, as we need to bind current topology & index byte width in AddAction
-      if(Info.indexType == VK_INDEX_TYPE_UINT32)
-        m_BakedCmdBufferInfo[m_LastCmdBufferID].state.ibuffer.bytewidth = 4;
-      else if(Info.indexType == VK_INDEX_TYPE_UINT8)
-        m_BakedCmdBufferInfo[m_LastCmdBufferID].state.ibuffer.bytewidth = 1;
-      else
-        m_BakedCmdBufferInfo[m_LastCmdBufferID].state.ibuffer.bytewidth = 2;
-
-      // track while reading, as we need to track resource usage
-      m_BakedCmdBufferInfo[m_LastCmdBufferID].state.ibuffer.buf =
-          GetResIDFromAddr(Info.addressRange.address);
-
-      ObjDisp(commandBuffer)->CmdBindIndexBuffer3KHR(Unwrap(commandBuffer), &Info);
-    }
-  }
-
-  return true;
-}
-
-void WrappedVulkan::vkCmdBindIndexBuffer3KHR(VkCommandBuffer commandBuffer,
-                                             const VkBindIndexBuffer3InfoKHR *pInfo)
-{
-  SCOPED_DBG_SINK();
-
-  SERIALISE_TIME_CALL(ObjDisp(commandBuffer)->CmdBindIndexBuffer3KHR(Unwrap(commandBuffer), pInfo));
-
-  if(IsCaptureMode(m_State))
-  {
-    VkResourceRecord *record = GetRecord(commandBuffer);
-
-    CACHE_THREAD_SERIALISER();
-
-    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdBindIndexBuffer3KHR);
-    Serialise_vkCmdBindIndexBuffer3KHR(ser, commandBuffer, pInfo);
-
-    record->AddChunk(scope.Get(&record->cmdInfo->alloc));
-
-    // all buffers referenced are BDA so they are already forcibly and pessimistically referenced
-  }
-}
-
-template <typename SerialiserType>
-bool WrappedVulkan::Serialise_vkCmdBindVertexBuffers3KHR(
-    SerialiserType &ser, VkCommandBuffer commandBuffer, uint32_t firstBinding,
-    uint32_t bindingCount, const VkBindVertexBuffer3InfoKHR *pBindingInfos)
-{
-  SERIALISE_ELEMENT(commandBuffer);
-  SERIALISE_ELEMENT(firstBinding).Important();
-  SERIALISE_ELEMENT(bindingCount);
-  SERIALISE_ELEMENT_ARRAY(pBindingInfos, bindingCount).Important();
-
-  Serialise_DebugMessages(ser);
-
-  SERIALISE_CHECK_READ_ERRORS();
-
-  if(IsReplayingAndReading())
-  {
-    m_LastCmdBufferID = GetResID(commandBuffer);
-
-    if(IsActiveReplaying(m_State))
-    {
-      if(InRerecordRange(m_LastCmdBufferID))
-      {
-        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
-        ObjDisp(commandBuffer)
-            ->CmdBindVertexBuffers3KHR(Unwrap(commandBuffer), firstBinding, bindingCount,
-                                       pBindingInfos);
-
-        {
-          VulkanRenderState &renderstate = GetCmdRenderState();
-          if(renderstate.vbuffers.size() < firstBinding + bindingCount)
-            renderstate.vbuffers.resize(firstBinding + bindingCount);
-
-          for(uint32_t i = 0; i < bindingCount; i++)
-          {
-            GetResIDFromAddr(pBindingInfos[i].addressRange.address,
-                             renderstate.vbuffers[firstBinding + i].buf,
-                             renderstate.vbuffers[firstBinding + i].offs);
-            renderstate.vbuffers[firstBinding + i].size = pBindingInfos[i].addressRange.size;
-
-            if(pBindingInfos[i].setStride)
-            {
-              renderstate.dynamicStates[VkDynamicVertexInputBindingStride] = true;
-
-              renderstate.vbuffers[firstBinding + i].stride = pBindingInfos[i].addressRange.stride;
-
-              // if we have dynamic vertex input data, update the strides. If we don't have any
-              // that's fine we can skip this, it means the application must provide a later
-              // vkCmdSetVertexInput which overrides anything we'd set here
-              if(firstBinding + i < renderstate.vertexBindings.size())
-                renderstate.vertexBindings[firstBinding + i].stride =
-                    (uint32_t)pBindingInfos[i].addressRange.stride;
-            }
-          }
-        }
-      }
-    }
-    else
-    {
-      // track while reading, as we need to track resource usage
-      if(m_BakedCmdBufferInfo[m_LastCmdBufferID].state.vbuffers.size() < firstBinding + bindingCount)
-        m_BakedCmdBufferInfo[m_LastCmdBufferID].state.vbuffers.resize(firstBinding + bindingCount);
-
-      for(uint32_t i = 0; i < bindingCount; i++)
-        m_BakedCmdBufferInfo[m_LastCmdBufferID].state.vbuffers[firstBinding + i].buf =
-            GetResIDFromAddr(pBindingInfos[i].addressRange.address);
-
-      ObjDisp(commandBuffer)
-          ->CmdBindVertexBuffers3KHR(Unwrap(commandBuffer), firstBinding, bindingCount,
-                                     pBindingInfos);
-    }
-  }
-
-  return true;
-}
-
-void WrappedVulkan::vkCmdBindVertexBuffers3KHR(VkCommandBuffer commandBuffer, uint32_t firstBinding,
-                                               uint32_t bindingCount,
-                                               const VkBindVertexBuffer3InfoKHR *pBindingInfos)
-{
-  SCOPED_DBG_SINK();
-
-  SERIALISE_TIME_CALL(ObjDisp(commandBuffer)
-                          ->CmdBindVertexBuffers3KHR(Unwrap(commandBuffer), firstBinding,
-                                                     bindingCount, pBindingInfos));
-
-  if(IsCaptureMode(m_State))
-  {
-    VkResourceRecord *record = GetRecord(commandBuffer);
-
-    CACHE_THREAD_SERIALISER();
-
-    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdBindVertexBuffers3KHR);
-    Serialise_vkCmdBindVertexBuffers3KHR(ser, commandBuffer, firstBinding, bindingCount,
-                                         pBindingInfos);
-
-    record->AddChunk(scope.Get(&record->cmdInfo->alloc));
-
-    // all buffers referenced are BDA so they are already forcibly and pessimistically referenced
-  }
-}
-
-template <typename SerialiserType>
-bool WrappedVulkan::Serialise_vkCmdCopyQueryPoolResultsToMemoryKHR(
-    SerialiserType &ser, VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery,
-    uint32_t queryCount, const VkStridedDeviceAddressRangeKHR *pDstRange,
-    VkAddressCommandFlagsKHR dstFlags, VkQueryResultFlags queryResultFlags)
-{
-  SERIALISE_ELEMENT(commandBuffer);
-  SERIALISE_ELEMENT(queryPool).Important();
-  SERIALISE_ELEMENT(firstQuery);
-  SERIALISE_ELEMENT(queryCount);
-  SERIALISE_ELEMENT_LOCAL(DstRange, *pDstRange).Important();
-  SERIALISE_ELEMENT_TYPED(VkAddressCommandFlagBitsKHR, dstFlags)
-      .TypedAs("VkAddressCommandFlagsKHR"_lit);
-  SERIALISE_ELEMENT_TYPED(VkQueryResultFlagBits, queryResultFlags)
-      .TypedAs("VkQueryResultFlags"_lit);
-
-  Serialise_DebugMessages(ser);
-
-  SERIALISE_CHECK_READ_ERRORS();
-
-  if(IsReplayingAndReading())
-  {
-    m_LastCmdBufferID = GetResID(commandBuffer);
-
-    if(IsActiveReplaying(m_State))
-    {
-      if(InRerecordRange(m_LastCmdBufferID))
-        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
-      else
-        commandBuffer = VK_NULL_HANDLE;
-    }
-
-    VulkanCreationInfo::QueryPool &qpInfo = m_CreationInfo.m_QueryPool[GetResID(queryPool)];
-
-    // skip AS queries as we do not serialise them
-    if(qpInfo.queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR ||
-       qpInfo.queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR ||
-       qpInfo.queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR ||
-       qpInfo.queryType ==
-           VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR)
-    {
-      if(commandBuffer != VK_NULL_HANDLE)
-      {
-        const bool is64bit = (queryResultFlags & VK_QUERY_RESULT_64_BIT) > 0;
-        const bool hasAvailability = (queryResultFlags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) > 0;
-        const VkDeviceSize resultSize = is64bit ? sizeof(uint64_t) : sizeof(uint32_t);
-        VkDeviceSize size = (queryCount - 1) * DstRange.stride + resultSize;
-        if(hasAvailability)
-        {
-          size += resultSize;
-        }
-
-        VkDeviceAddressRangeKHR range = {DstRange.address, size};
-        ObjDisp(commandBuffer)->CmdFillMemoryKHR(Unwrap(commandBuffer), &range, dstFlags, 0);
-      }
-
-      return true;
-    }
-
-    if(commandBuffer != VK_NULL_HANDLE)
-    {
-      ObjDisp(commandBuffer)
-          ->CmdCopyQueryPoolResultsToMemoryKHR(Unwrap(commandBuffer), Unwrap(queryPool), firstQuery,
-                                               queryCount, &DstRange, dstFlags, queryResultFlags);
-    }
-  }
-
-  return true;
-}
-
-void WrappedVulkan::vkCmdCopyQueryPoolResultsToMemoryKHR(
-    VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount,
-    const VkStridedDeviceAddressRangeKHR *pDstRange, VkAddressCommandFlagsKHR dstFlags,
-    VkQueryResultFlags queryResultFlags)
-{
-  SCOPED_DBG_SINK();
-
-  SERIALISE_TIME_CALL(
-      ObjDisp(commandBuffer)
-          ->CmdCopyQueryPoolResultsToMemoryKHR(Unwrap(commandBuffer), Unwrap(queryPool), firstQuery,
-                                               queryCount, pDstRange, dstFlags, queryResultFlags));
-
-  if(IsCaptureMode(m_State))
-  {
-    VkResourceRecord *record = GetRecord(commandBuffer);
-
-    CACHE_THREAD_SERIALISER();
-
-    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdCopyQueryPoolResultsToMemoryKHR);
-    Serialise_vkCmdCopyQueryPoolResultsToMemoryKHR(ser, commandBuffer, queryPool, firstQuery,
-                                                   queryCount, pDstRange, dstFlags, queryResultFlags);
-
-    record->AddChunk(scope.Get(&record->cmdInfo->alloc));
-
-    record->MarkResourceFrameReferenced(GetResID(queryPool), eFrameRef_Read);
-
-    const bool is64bit = (queryResultFlags & VK_QUERY_RESULT_64_BIT) > 0;
-    VkDeviceSize size = (queryCount - 1) * pDstRange->stride + 4;
-    if(is64bit)
-    {
-      size += 4;
-    }
-
-    // all buffers referenced are BDA so they are already forcibly and pessimistically referenced
-
-    const QueryPoolInfo *qpInfo = GetRecord(queryPool)->queryPoolInfo;
-    if(qpInfo)
-    {
-      VkMemoryBarrier barrier = {
-          VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-          NULL,
-          VK_ACCESS_TRANSFER_WRITE_BIT,
-          VK_ACCESS_TRANSFER_READ_BIT,
-      };
-      ObjDisp(commandBuffer)
-          ->CmdPipelineBarrier(Unwrap(commandBuffer), VK_PIPELINE_STAGE_TRANSFER_BIT,
-                               VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 1, &barrier, 0, VK_NULL_HANDLE,
-                               0, VK_NULL_HANDLE);
-
-      const bool hasAvailability = (queryResultFlags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) > 0;
-      const VkDeviceSize resultSize = is64bit ? sizeof(uint64_t) : sizeof(uint32_t);
-
-      ResourceId id;
-      uint64_t offs;
-      GetResIDFromAddr(pDstRange->address, id, offs);
-
-      // If the stride matches the source buffer, then we can copy everything in a single region
-      if(is64bit && !hasAvailability && pDstRange->stride == resultSize)
-      {
-        const VkBufferCopy region = {
-            firstQuery * resultSize,
-            offs,
-            queryCount * resultSize,
-        };
-        ObjDisp(commandBuffer)
-            ->CmdCopyBuffer(Unwrap(commandBuffer), qpInfo->m_Buffer.UnwrappedBuffer(),
-                            Unwrap(GetResourceManager()->GetHandle<VkBuffer>(id)), 1, &region);
-      }
-      else
-      {
-        // Copy each result into the destination, converting if required
-        rdcarray<VkBufferCopy> regions;
-        regions.reserve(queryCount);
-        for(size_t i = 0; i < queryCount; ++i)
-          regions.push_back(
-              {(firstQuery + i) * sizeof(uint64_t), offs + (i * pDstRange->stride), resultSize});
-
-        ObjDisp(commandBuffer)
-            ->CmdCopyBuffer(Unwrap(commandBuffer), qpInfo->m_Buffer.UnwrappedBuffer(),
-                            Unwrap(GetResourceManager()->GetHandle<VkBuffer>(id)),
-                            (uint32_t)regions.size(), regions.data());
-      }
-
-      if(hasAvailability)
-      {
-        const uint64_t availability = 1;
-        for(size_t i = 0; i < queryCount; ++i)
-          ObjDisp(commandBuffer)
-              ->CmdUpdateBuffer(Unwrap(commandBuffer), qpInfo->m_Buffer.UnwrappedBuffer(),
-                                offs + (i * resultSize) + resultSize, resultSize,
-                                (uint32_t *)&availability);
-      }
-    }
-  }
-}
-
-template <typename SerialiserType>
-bool WrappedVulkan::Serialise_vkCmdWriteMarkerToMemoryAMD(SerialiserType &ser,
-                                                          VkCommandBuffer commandBuffer,
-                                                          const VkMemoryMarkerInfoAMD *pInfo)
-{
-  SERIALISE_ELEMENT(commandBuffer);
-  SERIALISE_ELEMENT_LOCAL(Info, *pInfo).Important();
-
-  Serialise_DebugMessages(ser);
-
-  SERIALISE_CHECK_READ_ERRORS();
-
-  if(IsReplayingAndReading())
-  {
-    m_LastCmdBufferID = GetResID(commandBuffer);
-
-    if(IsActiveReplaying(m_State))
-    {
-      if(InRerecordRange(m_LastCmdBufferID))
-        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
-      else
-        commandBuffer = VK_NULL_HANDLE;
-    }
-
-    if(commandBuffer != VK_NULL_HANDLE)
-    {
-      ObjDisp(commandBuffer)->CmdWriteMarkerToMemoryAMD(Unwrap(commandBuffer), &Info);
-    }
-  }
-
-  return true;
-}
-
-void WrappedVulkan::vkCmdWriteMarkerToMemoryAMD(VkCommandBuffer commandBuffer,
-                                                const VkMemoryMarkerInfoAMD *pInfo)
-{
-  SCOPED_DBG_SINK();
-
-  SERIALISE_TIME_CALL(ObjDisp(commandBuffer)->CmdWriteMarkerToMemoryAMD(Unwrap(commandBuffer), pInfo));
-
-  if(IsCaptureMode(m_State))
-  {
-    VkResourceRecord *record = GetRecord(commandBuffer);
-
-    CACHE_THREAD_SERIALISER();
-
-    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdWriteMarkerToMemoryAMD);
-    Serialise_vkCmdWriteMarkerToMemoryAMD(ser, commandBuffer, pInfo);
-
-    record->AddChunk(scope.Get(&record->cmdInfo->alloc));
-
-    // all buffers referenced are BDA so they are already forcibly and pessimistically referenced
-  }
-}
-
-template <typename SerialiserType>
-bool WrappedVulkan::Serialise_vkCmdBeginConditionalRendering2EXT(
-    SerialiserType &ser, VkCommandBuffer commandBuffer,
-    const VkConditionalRenderingBeginInfo2EXT *pConditionalRenderingBegin)
-{
-  SERIALISE_ELEMENT(commandBuffer);
-  SERIALISE_ELEMENT_LOCAL(BeginInfo, *pConditionalRenderingBegin)
-      .Named("pConditionalRenderingBegin"_lit)
-      .Important();
-
-  Serialise_DebugMessages(ser);
-
-  SERIALISE_CHECK_READ_ERRORS();
-
-  if(IsReplayingAndReading())
-  {
-    m_LastCmdBufferID = GetResID(commandBuffer);
-
-    if(IsActiveReplaying(m_State))
-    {
-      if(InRerecordRange(m_LastCmdBufferID))
-      {
-        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
-
-        {
-          VulkanRenderState &renderstate = GetCmdRenderState();
-          GetResIDFromAddr(BeginInfo.addressRange.address, renderstate.conditionalRendering.buffer,
-                           renderstate.conditionalRendering.offset);
-          renderstate.conditionalRendering.flags = BeginInfo.flags;
-        }
-
-        ObjDisp(commandBuffer)->CmdBeginConditionalRendering2EXT(Unwrap(commandBuffer), &BeginInfo);
-      }
-    }
-    else
-    {
-      ObjDisp(commandBuffer)->CmdBeginConditionalRendering2EXT(Unwrap(commandBuffer), &BeginInfo);
-    }
-  }
-
-  return true;
-}
-
-void WrappedVulkan::vkCmdBeginConditionalRendering2EXT(
-    VkCommandBuffer commandBuffer,
-    const VkConditionalRenderingBeginInfo2EXT *pConditionalRenderingBegin)
-{
-  SCOPED_DBG_SINK();
-
-  SERIALISE_TIME_CALL(
-      ObjDisp(commandBuffer)
-          ->CmdBeginConditionalRendering2EXT(Unwrap(commandBuffer), pConditionalRenderingBegin));
-
-  if(IsCaptureMode(m_State))
-  {
-    VkResourceRecord *record = GetRecord(commandBuffer);
-
-    CACHE_THREAD_SERIALISER();
-
-    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdBeginConditionalRendering2EXT);
-    Serialise_vkCmdBeginConditionalRendering2EXT(ser, commandBuffer, pConditionalRenderingBegin);
-
-    record->AddChunk(scope.Get(&record->cmdInfo->alloc));
-
-    // all buffers referenced are BDA so they are already forcibly and pessimistically referenced
-  }
-}
-
-template <typename SerialiserType>
-bool WrappedVulkan::Serialise_vkCmdBeginTransformFeedback2EXT(
-    SerialiserType &ser, VkCommandBuffer commandBuffer, uint32_t firstCounterRange,
-    uint32_t counterRangeCount, const VkBindTransformFeedbackBuffer2InfoEXT *pCounterInfos)
-{
-  SERIALISE_ELEMENT(commandBuffer);
-  SERIALISE_ELEMENT(firstCounterRange).Important();
-  SERIALISE_ELEMENT(counterRangeCount).Important();
-  SERIALISE_ELEMENT_ARRAY(pCounterInfos, counterRangeCount);
-
-  Serialise_DebugMessages(ser);
-
-  SERIALISE_CHECK_READ_ERRORS();
-
-  if(IsReplayingAndReading())
-  {
-    m_LastCmdBufferID = GetResID(commandBuffer);
-
-    if(IsActiveReplaying(m_State))
-    {
-      if(InRerecordRange(m_LastCmdBufferID))
-      {
-        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
-
-        {
-          VulkanRenderState &renderstate = GetCmdRenderState();
-          renderstate.firstxfbcounter = firstCounterRange;
-          renderstate.xfbcounters.resize(counterRangeCount);
-
-          for(uint32_t i = 0; i < counterRangeCount; i++)
-            GetResIDFromAddr(pCounterInfos[i].addressRange.address, renderstate.xfbcounters[i].buf,
-                             renderstate.xfbcounters[i].offs);
-        }
-
-        ObjDisp(commandBuffer)
-            ->CmdBeginTransformFeedback2EXT(Unwrap(commandBuffer), firstCounterRange,
-                                            counterRangeCount, pCounterInfos);
-      }
-    }
-    else
-    {
-      ObjDisp(commandBuffer)
-          ->CmdBeginTransformFeedback2EXT(Unwrap(commandBuffer), firstCounterRange,
-                                          counterRangeCount, pCounterInfos);
-
-      // track while reading, for fetching the right set of outputs in AddAction
-      m_BakedCmdBufferInfo[m_LastCmdBufferID].state.firstxfbcounter = firstCounterRange;
-      m_BakedCmdBufferInfo[m_LastCmdBufferID].state.xfbcounters.resize(counterRangeCount);
-    }
-  }
-
-  return true;
-}
-
-void WrappedVulkan::vkCmdBeginTransformFeedback2EXT(
-    VkCommandBuffer commandBuffer, uint32_t firstCounterRange, uint32_t counterRangeCount,
-    const VkBindTransformFeedbackBuffer2InfoEXT *pCounterInfos)
-{
-  SCOPED_DBG_SINK();
-
-  SERIALISE_TIME_CALL(ObjDisp(commandBuffer)
-                          ->CmdBeginTransformFeedback2EXT(Unwrap(commandBuffer), firstCounterRange,
-                                                          counterRangeCount, pCounterInfos));
-
-  if(IsCaptureMode(m_State))
-  {
-    VkResourceRecord *record = GetRecord(commandBuffer);
-
-    CACHE_THREAD_SERIALISER();
-    ser.SetActionChunk();
-    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdBeginTransformFeedback2EXT);
-    Serialise_vkCmdBeginTransformFeedback2EXT(ser, commandBuffer, firstCounterRange,
-                                              counterRangeCount, pCounterInfos);
-
-    record->AddChunk(scope.Get(&record->cmdInfo->alloc));
-
-    // all buffers referenced are BDA so they are already forcibly and pessimistically referenced
-  }
-}
-
-template <typename SerialiserType>
-bool WrappedVulkan::Serialise_vkCmdBindTransformFeedbackBuffers2EXT(
-    SerialiserType &ser, VkCommandBuffer commandBuffer, uint32_t firstBinding,
-    uint32_t bindingCount, const VkBindTransformFeedbackBuffer2InfoEXT *pBindingInfos)
-{
-  SERIALISE_ELEMENT(commandBuffer);
-  SERIALISE_ELEMENT(firstBinding).Important();
-  SERIALISE_ELEMENT(bindingCount);
-  SERIALISE_ELEMENT_ARRAY(pBindingInfos, bindingCount).Important();
-
-  Serialise_DebugMessages(ser);
-
-  SERIALISE_CHECK_READ_ERRORS();
-
-  if(IsReplayingAndReading())
-  {
-    m_LastCmdBufferID = GetResID(commandBuffer);
-
-    if(IsActiveReplaying(m_State))
-    {
-      if(InRerecordRange(m_LastCmdBufferID))
-      {
-        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
-        ObjDisp(commandBuffer)
-            ->CmdBindTransformFeedbackBuffers2EXT(Unwrap(commandBuffer), firstBinding, bindingCount,
-                                                  pBindingInfos);
-
-        {
-          VulkanRenderState &renderstate = GetCmdRenderState();
-          if(renderstate.xfbbuffers.size() < firstBinding + bindingCount)
-            renderstate.xfbbuffers.resize(firstBinding + bindingCount);
-
-          for(uint32_t i = 0; i < bindingCount; i++)
-          {
-            GetResIDFromAddr(pBindingInfos[i].addressRange.address,
-                             renderstate.xfbbuffers[firstBinding + i].buf,
-                             renderstate.xfbbuffers[firstBinding + i].offs);
-            renderstate.xfbbuffers[firstBinding + i].size = pBindingInfos[i].addressRange.size;
-          }
-        }
-      }
-    }
-    else
-    {
-      // track while reading, as we need to track resource usage
-      if(m_BakedCmdBufferInfo[m_LastCmdBufferID].state.xfbbuffers.size() < firstBinding + bindingCount)
-        m_BakedCmdBufferInfo[m_LastCmdBufferID].state.xfbbuffers.resize(firstBinding + bindingCount);
-
-      for(uint32_t i = 0; i < bindingCount; i++)
-        m_BakedCmdBufferInfo[m_LastCmdBufferID].state.xfbbuffers[firstBinding + i].buf =
-            GetResIDFromAddr(pBindingInfos[i].addressRange.address);
-
-      ObjDisp(commandBuffer)
-          ->CmdBindTransformFeedbackBuffers2EXT(Unwrap(commandBuffer), firstBinding, bindingCount,
-                                                pBindingInfos);
-    }
-  }
-
-  return true;
-}
-
-void WrappedVulkan::vkCmdBindTransformFeedbackBuffers2EXT(
-    VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount,
-    const VkBindTransformFeedbackBuffer2InfoEXT *pBindingInfos)
-{
-  SCOPED_DBG_SINK();
-
-  SERIALISE_TIME_CALL(ObjDisp(commandBuffer)
-                          ->CmdBindTransformFeedbackBuffers2EXT(Unwrap(commandBuffer), firstBinding,
-                                                                bindingCount, pBindingInfos));
-
-  if(IsCaptureMode(m_State))
-  {
-    VkResourceRecord *record = GetRecord(commandBuffer);
-
-    CACHE_THREAD_SERIALISER();
-
-    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdBindTransformFeedbackBuffers2EXT);
-    Serialise_vkCmdBindTransformFeedbackBuffers2EXT(ser, commandBuffer, firstBinding, bindingCount,
-                                                    pBindingInfos);
-
-    record->AddChunk(scope.Get(&record->cmdInfo->alloc));
-
-    // all buffers referenced are BDA so they are already forcibly and pessimistically referenced
-  }
-}
-
-template <typename SerialiserType>
-bool WrappedVulkan::Serialise_vkCmdEndTransformFeedback2EXT(
-    SerialiserType &ser, VkCommandBuffer commandBuffer, uint32_t firstCounterRange,
-    uint32_t counterRangeCount, const VkBindTransformFeedbackBuffer2InfoEXT *pCounterInfos)
-{
-  SERIALISE_ELEMENT(commandBuffer);
-  SERIALISE_ELEMENT(firstCounterRange).Important();
-  SERIALISE_ELEMENT(counterRangeCount).Important();
-  SERIALISE_ELEMENT_ARRAY(pCounterInfos, counterRangeCount);
-
-  Serialise_DebugMessages(ser);
-
-  SERIALISE_CHECK_READ_ERRORS();
-
-  if(IsReplayingAndReading())
-  {
-    m_LastCmdBufferID = GetResID(commandBuffer);
-
-    if(IsActiveReplaying(m_State))
-    {
-      if(InRerecordRange(m_LastCmdBufferID))
-      {
-        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
-
-        {
-          VulkanRenderState &renderstate = GetCmdRenderState();
-          renderstate.firstxfbcounter = 0;
-          renderstate.xfbcounters.clear();
-        }
-
-        ObjDisp(commandBuffer)
-            ->CmdEndTransformFeedback2EXT(Unwrap(commandBuffer), firstCounterRange,
-                                          counterRangeCount, pCounterInfos);
-      }
-    }
-    else
-    {
-      ObjDisp(commandBuffer)
-          ->CmdEndTransformFeedback2EXT(Unwrap(commandBuffer), firstCounterRange, counterRangeCount,
-                                        pCounterInfos);
-
-      // track while reading, for fetching the right set of outputs in AddAction
-      m_BakedCmdBufferInfo[m_LastCmdBufferID].state.firstxfbcounter = 0;
-      m_BakedCmdBufferInfo[m_LastCmdBufferID].state.xfbcounters.clear();
-    }
-  }
-
-  return true;
-}
-
-void WrappedVulkan::vkCmdEndTransformFeedback2EXT(
-    VkCommandBuffer commandBuffer, uint32_t firstCounterRange, uint32_t counterRangeCount,
-    const VkBindTransformFeedbackBuffer2InfoEXT *pCounterInfos)
-{
-  SCOPED_DBG_SINK();
-
-  SERIALISE_TIME_CALL(ObjDisp(commandBuffer)
-                          ->CmdEndTransformFeedback2EXT(Unwrap(commandBuffer), firstCounterRange,
-                                                        counterRangeCount, pCounterInfos));
-
-  if(IsCaptureMode(m_State))
-  {
-    VkResourceRecord *record = GetRecord(commandBuffer);
-
-    CACHE_THREAD_SERIALISER();
-    ser.SetActionChunk();
-    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdEndTransformFeedback2EXT);
-    Serialise_vkCmdEndTransformFeedback2EXT(ser, commandBuffer, firstCounterRange,
-                                            counterRangeCount, pCounterInfos);
-
-    record->AddChunk(scope.Get(&record->cmdInfo->alloc));
-
-    // all buffers referenced are BDA so they are already forcibly and pessimistically referenced
   }
 }
 
@@ -11443,33 +10686,3 @@ INSTANTIATE_FUNCTION_SERIALISED(
 
 INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdBeginCustomResolveEXT, VkCommandBuffer commandBuffer,
                                 const VkBeginCustomResolveInfoEXT *pBeginCustomResolveInfo);
-
-INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdSetCheckpointNV, VkCommandBuffer commandBuffer,
-                                const void *pCheckpointMarker);
-
-INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdBindIndexBuffer3KHR, VkCommandBuffer commandBuffer,
-                                const VkBindIndexBuffer3InfoKHR *pInfo);
-INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdBindVertexBuffers3KHR, VkCommandBuffer commandBuffer,
-                                uint32_t firstBinding, uint32_t bindingCount,
-                                const VkBindVertexBuffer3InfoKHR *pBindingInfos);
-INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdCopyQueryPoolResultsToMemoryKHR,
-                                VkCommandBuffer commandBuffer, VkQueryPool queryPool,
-                                uint32_t firstQuery, uint32_t queryCount,
-                                const VkStridedDeviceAddressRangeKHR *pDstRange,
-                                VkAddressCommandFlagsKHR dstFlags,
-                                VkQueryResultFlags queryResultFlags);
-INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdWriteMarkerToMemoryAMD, VkCommandBuffer commandBuffer,
-                                const VkMemoryMarkerInfoAMD *pInfo);
-INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdBeginConditionalRendering2EXT,
-                                VkCommandBuffer commandBuffer,
-                                const VkConditionalRenderingBeginInfo2EXT *pConditionalRenderingBegin);
-INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdBeginTransformFeedback2EXT, VkCommandBuffer commandBuffer,
-                                uint32_t firstCounterRange, uint32_t counterRangeCount,
-                                const VkBindTransformFeedbackBuffer2InfoEXT *pCounterInfos);
-INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdBindTransformFeedbackBuffers2EXT,
-                                VkCommandBuffer commandBuffer, uint32_t firstBinding,
-                                uint32_t bindingCount,
-                                const VkBindTransformFeedbackBuffer2InfoEXT *pBindingInfos);
-INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdEndTransformFeedback2EXT, VkCommandBuffer commandBuffer,
-                                uint32_t firstCounterRange, uint32_t counterRangeCount,
-                                const VkBindTransformFeedbackBuffer2InfoEXT *pCounterInfos);

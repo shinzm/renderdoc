@@ -13,7 +13,7 @@ Window reference
 	mesh_viewer
 	performance_counter_viewer
 	pipeline_state
-	python_scripting
+	python_shell
 	resource_inspector
 	settings_window
 	shader_messages

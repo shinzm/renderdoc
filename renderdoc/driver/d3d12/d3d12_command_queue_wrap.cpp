@@ -127,7 +127,7 @@ void STDMETHODCALLTYPE WrappedID3D12CommandQueue::UpdateTileMappings(
 #define RANGE_SIZE(i) (pRangeTileCounts ? pRangeTileCounts[i] : ~0U)
 
     const UINT pageSize = 64 * 1024;
-    const Sparse::Coord32 texelShape = pageTable.getPageTexelSize();
+    const Sparse::Coord texelShape = pageTable.getPageTexelSize();
 
     // this persists from loop to loop. The effective offset is rangeBaseOffset +
     // curRelativeRangeOffset. That allows us to partially use a range in one region then another.
@@ -143,11 +143,11 @@ void STDMETHODCALLTYPE WrappedID3D12CommandQueue::UpdateTileMappings(
 
       // sanitise the region size according to the dimensions of the texture
       // clamp inputs that may be invalid for buffers or 2D to sensible values
-      regionSize.Width = RDCCLAMP(1U, regionSize.Width, pageTable.getResourceTexelDim().x);
+      regionSize.Width = RDCCLAMP(1U, regionSize.Width, pageTable.getResourceSize().x);
       regionSize.Height =
-          (uint16_t)RDCCLAMP(1U, (uint32_t)regionSize.Height, pageTable.getResourceTexelDim().y);
+          (uint16_t)RDCCLAMP(1U, (uint32_t)regionSize.Height, pageTable.getResourceSize().y);
       regionSize.Depth =
-          (uint16_t)RDCCLAMP(1U, (uint32_t)regionSize.Depth, pageTable.getResourceTexelDim().z);
+          (uint16_t)RDCCLAMP(1U, (uint32_t)regionSize.Depth, pageTable.getResourceSize().z);
 
       UINT rangeBaseOffset = RANGE_OFFSET(curRange);
       UINT rangeSize = RANGE_SIZE(curRange);
@@ -413,11 +413,11 @@ void STDMETHODCALLTYPE WrappedID3D12CommandQueue::CopyTileMappings(
         return;
 
       // clamp inputs that may be invalid for buffers or 2D to sensible values
-      size.Width = RDCCLAMP(1U, pRegionSize->Width, dstPageTable.getResourceTexelDim().x);
-      size.Height = (uint16_t)RDCCLAMP(1U, (uint32_t)pRegionSize->Height,
-                                       dstPageTable.getResourceTexelDim().y);
+      size.Width = RDCCLAMP(1U, pRegionSize->Width, dstPageTable.getResourceSize().x);
+      size.Height =
+          (uint16_t)RDCCLAMP(1U, (uint32_t)pRegionSize->Height, dstPageTable.getResourceSize().y);
       size.Depth =
-          (uint16_t)RDCCLAMP(1U, (uint32_t)pRegionSize->Depth, dstPageTable.getResourceTexelDim().z);
+          (uint16_t)RDCCLAMP(1U, (uint32_t)pRegionSize->Depth, dstPageTable.getResourceSize().z);
 
       dstPageTable.copyImageBoxRange(
           dstSub,
@@ -460,9 +460,8 @@ bool WrappedID3D12CommandQueue::Serialise_ExecuteCommandLists(SerialiserType &se
       if(m_pDevice->GetReplayOptions().apiValidation)
         DebugMessages.clear();
 
-      D3D12EventNode &eventNode = m_Cmd.m_LoadingEventNode;
       for(const DebugMessage &msg : DebugMessages)
-        eventNode.debugMessages.push_back(msg);
+        m_Cmd.m_EventMessages.push_back(msg);
     }
   }
 
@@ -487,6 +486,9 @@ bool WrappedID3D12CommandQueue::Serialise_ExecuteCommandLists(SerialiserType &se
     if(IsLoading(m_State))
     {
       m_Cmd.AddEvent();
+
+      // we're adding multiple events, need to increment ourselves
+      m_Cmd.m_RootEventID++;
 
       for(uint32_t i = 0; i < NumCommandLists; i++)
       {
@@ -581,13 +583,17 @@ bool WrappedID3D12CommandQueue::Serialise_ExecuteCommandLists(SerialiserType &se
           }
         }
 
-        if(info.hasExecuteDatas)
+        if(!info.executeEvents.empty())
         {
           // ensure all GPU work has finished for readback of arguments
           m_pDevice->DeviceWaitForIdle();
 
           if(m_pDevice->HasFatalError())
             return false;
+
+          // readback the patch buffer and update recorded events
+          for(size_t c = 0; c < info.executeEvents.size(); c++)
+            m_ReplayList->FinaliseExecuteIndirectEvents(info, info.executeEvents[c]);
         }
       }
 
@@ -614,16 +620,56 @@ bool WrappedID3D12CommandQueue::Serialise_ExecuteCommandLists(SerialiserType &se
                          ActionFlags::BeginPass;
           m_Cmd.AddEvent();
 
+          m_Cmd.m_RootEvents.back().chunkIndex = cmdListInfo.beginChunk;
+          m_Cmd.m_Events.back().chunkIndex = cmdListInfo.beginChunk;
+
           m_Cmd.AddAction(action);
-          D3D12EventNode &eventNode = m_Cmd.GetLastEventNode();
-          eventNode.event.chunkIndex = cmdListInfo.beginChunk;
-          eventNode.addActionUse = false;
-          eventNode.addPrimaryExecute = true;
-          eventNode.primaryCmdId = cmd;
+          m_Cmd.m_RootEventID++;
         }
 
-        // insert the baked command buffer into the root events, resolving indirect actions
-        SDObject *localAnnotations = m_Cmd.InsertEventNodes(m_ReplayList, cmd, cmdListInfo);
+        // insert the baked command list in-line into this list of notes, assigning new event and
+        // drawIDs
+        m_Cmd.InsertActionsAndRefreshIDs(cmd, cmdListInfo);
+
+        for(size_t e = 0; e < cmdListInfo.action->executedCmds.size(); e++)
+        {
+          rdcarray<uint32_t> &submits = m_Cmd.m_Partial[D3D12CommandData::Secondary]
+                                            .cmdListExecs[cmdListInfo.action->executedCmds[e]];
+
+          for(size_t s = 0; s < submits.size(); s++)
+            submits[s] += m_Cmd.m_RootEventID;
+        }
+
+        for(size_t i = 0; i < cmdListInfo.debugMessages.size(); i++)
+        {
+          DebugMessage msg = cmdListInfo.debugMessages[i];
+          msg.eventId += m_Cmd.m_RootEventID;
+          m_pDevice->AddDebugMessage(msg);
+        }
+
+        // only primary command lists can be submitted
+        m_Cmd.m_Partial[D3D12CommandData::Primary].cmdListExecs[cmd].push_back(m_Cmd.m_RootEventID);
+
+        // pull in any remaining events on the command buffer that weren't added to an action
+        for(size_t e = 0; e < cmdListInfo.curEvents.size(); e++)
+        {
+          APIEvent apievent = cmdListInfo.curEvents[e];
+          apievent.eventId += m_Cmd.m_RootEventID;
+
+          m_Cmd.m_RootEvents.push_back(apievent);
+          m_Cmd.m_Events.resize_for_index(apievent.eventId);
+          m_Cmd.m_Events[apievent.eventId] = apievent;
+        }
+
+        for(auto it = cmdListInfo.resourceUsage.begin(); it != cmdListInfo.resourceUsage.end(); ++it)
+        {
+          EventUsage u = it->second;
+          u.eventId += m_Cmd.m_RootEventID;
+          m_Cmd.m_ResourceUses[it->first].push_back(u);
+        }
+
+        m_Cmd.m_RootEventID += cmdListInfo.eventCount;
+        m_Cmd.m_RootActionID += cmdListInfo.actionCount;
 
         {
           action.customName =
@@ -632,25 +678,11 @@ bool WrappedID3D12CommandQueue::Serialise_ExecuteCommandLists(SerialiserType &se
               ActionFlags::CommandBufferBoundary | ActionFlags::PassBoundary | ActionFlags::EndPass;
           m_Cmd.AddEvent();
 
-          m_Cmd.AddAction(action);
+          m_Cmd.m_RootEvents.back().chunkIndex = cmdListInfo.endChunk;
+          m_Cmd.m_Events.back().chunkIndex = cmdListInfo.endChunk;
 
-          D3D12EventNode &eventNode = m_Cmd.GetLastEventNode();
-          eventNode.event.chunkIndex = cmdListInfo.endChunk;
-          eventNode.addActionUse = false;
-          if(localAnnotations)
-          {
-            // Modify using the annotations stored in the event node
-            for(const PendingAnnotation &annot : cmdListInfo.pendingAnnotations)
-            {
-              if(annot.valueType == eRENDERDOC_Empty)
-                localAnnotations->EraseChildByKeyPath(annot.key);
-              else
-                WriteAnnotation(localAnnotations->CreateChildByKeyPath(annot.key), annot.valueType,
-                                annot.valueVectorWidth, annot.value);
-            }
-            eventNode.event.annotations = localAnnotations->Duplicate();
-            delete localAnnotations;
-          }
+          m_Cmd.AddAction(action);
+          m_Cmd.m_RootEventID++;
         }
       }
 
@@ -671,10 +703,12 @@ bool WrappedID3D12CommandQueue::Serialise_ExecuteCommandLists(SerialiserType &se
         ResourceId cmd = GetResID(ppCommandLists[c]);
 
         m_Cmd.m_RootEventID += m_Cmd.m_BakedCmdListInfo[cmd].eventCount;
+        m_Cmd.m_RootActionID += m_Cmd.m_BakedCmdListInfo[cmd].actionCount;
 
         // 2 extra for the virtual labels around the command list
         {
           m_Cmd.m_RootEventID += 2;
+          m_Cmd.m_RootActionID += 2;
         }
       }
 
@@ -1287,6 +1321,9 @@ bool WrappedID3D12CommandQueue::Serialise_BeginEvent(SerialiserType &ser, UINT M
 
       m_Cmd.AddEvent();
       m_Cmd.AddAction(action);
+
+      // now push the action stack
+      m_Cmd.GetActionStack().push_back(&m_Cmd.GetActionStack().back()->children.back());
     }
   }
 
@@ -1328,6 +1365,9 @@ bool WrappedID3D12CommandQueue::Serialise_EndEvent(SerialiserType &ser)
 
       m_Cmd.AddEvent();
       m_Cmd.AddAction(action);
+
+      if(m_Cmd.GetActionStack().size() > 1)
+        m_Cmd.GetActionStack().pop_back();
     }
   }
 

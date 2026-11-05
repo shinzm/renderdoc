@@ -3,7 +3,6 @@ import rdtest
 # Not a real test, re-used by API-specific tests
 class Workgroup_Zoo(rdtest.Subgroup_Zoo):
     internal = True
-    slow_test = True
     demos_test_name = None
 
     def check_capture(self):
@@ -28,5 +27,7 @@ class Workgroup_Zoo(rdtest.Subgroup_Zoo):
         self.workgroup = (1, 0, 0)
         if self.check_compute_tests(compute_dims, thread_checks):
             raise rdtest.TestFailureException("Some tests were not as expected")
+
+        self.check_renderdoc_log_asserts()
 
         rdtest.log.success("All tests matched")

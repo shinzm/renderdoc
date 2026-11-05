@@ -82,7 +82,7 @@ using namespace rdcshaders;
 //   ShuffleVector: mask entries might be undef meaning "don't care"
 
 // normal is not zero, not subnormal, not infinite, not NaN
-static bool RDCISNORMAL(float input)
+inline bool RDCISNORMAL(float input)
 {
   union
   {
@@ -101,7 +101,7 @@ static bool RDCISNORMAL(float input)
   return true;
 }
 
-static bool RDCISNORMAL(double input)
+inline bool RDCISNORMAL(double input)
 {
   union
   {
@@ -539,41 +539,7 @@ static bool OperationFlushing(const Operation op, DXOp dxOpCode)
       case DXOp::NodeOutputIsValid:
       case DXOp::GetRemainingRecursionLevels:
       case DXOp::StartVertexLocation:
-      case DXOp::StartInstanceLocation:
-      case DXOp::AllocateRayQuery2:
-      case DXOp::HitObject_TraceRay:
-      case DXOp::HitObject_FromRayQuery:
-      case DXOp::HitObject_FromRayQueryWithAttrs:
-      case DXOp::HitObject_MakeMiss:
-      case DXOp::HitObject_MakeNop:
-      case DXOp::HitObject_Invoke:
-      case DXOp::MaybeReorderThread:
-      case DXOp::HitObject_IsMiss:
-      case DXOp::HitObject_IsHit:
-      case DXOp::HitObject_IsNop:
-      case DXOp::HitObject_RayFlags:
-      case DXOp::HitObject_RayTMin:
-      case DXOp::HitObject_RayTCurrent:
-      case DXOp::HitObject_WorldRayOrigin:
-      case DXOp::HitObject_WorldRayDirection:
-      case DXOp::HitObject_ObjectRayOrigin:
-      case DXOp::HitObject_ObjectRayDirection:
-      case DXOp::HitObject_ObjectToWorld3x4:
-      case DXOp::HitObject_WorldToObject3x4:
-      case DXOp::HitObject_GeometryIndex:
-      case DXOp::HitObject_InstanceIndex:
-      case DXOp::HitObject_InstanceID:
-      case DXOp::HitObject_PrimitiveIndex:
-      case DXOp::HitObject_HitKind:
-      case DXOp::HitObject_ShaderTableIndex:
-      case DXOp::HitObject_SetShaderTableIndex:
-      case DXOp::HitObject_LoadLocalRootTableConstant:
-      case DXOp::HitObject_Attributes:
-      case DXOp::RawBufferVectorLoad:
-      case DXOp::RawBufferVectorStore:
-      case DXOp::VectorReduceAnd:
-      case DXOp::VectorReduceOr:
-      case DXOp::FDot: return false;
+      case DXOp::StartInstanceLocation: return false;
       case DXOp::NumOpCodes:
         RDCERR("Unhandled DXOpCode %s in DXIL shader debugger", ToStr(dxOpCode).c_str());
         break;
@@ -979,18 +945,9 @@ static bool ConvertDXILConstantToShaderValue(const DXIL::Constant *c, const size
   else if(c->isLiteral())
   {
     if(c->type->bitWidth == 64)
-    {
       value.u64v[index] = c->getU64();
-    }
-    else if(c->type->bitWidth == 1)
-    {
-      // Special case for 1-bit types : which should be bool's : debugger convention is true is 1, false is 0
-      value.u8v[0] = (c->getU32() != 0) ? 1 : 0;
-    }
     else
-    {
       value.u32v[index] = c->getU32();
-    }
     return true;
   }
   else if(c->isNULL())
@@ -1295,6 +1252,57 @@ static size_t ComputeDXILTypeByteSize(const Type *type)
   return byteSize;
 }
 
+void ConvertTypeToViewFormat(const DXIL::Type *type, DXILDebug::ViewFmt &fmt)
+{
+  // variable should be a pointer to the underlying type
+  RDCASSERTEQUAL(type->type, Type::Pointer);
+  const Type *resType = type->inner;
+
+  // arrayed resources we want to remove the outer array-of-bindings here
+  if(resType->type == Type::Array && resType->inner->type == Type::Struct)
+    resType = resType->inner;
+
+  // textures are a struct containing the inner type and a mips type
+  if(resType->type == Type::Struct && !resType->members.empty())
+    resType = resType->members[0];
+
+  // find the inner type of any arrays
+  while(resType->type == Type::Array)
+    resType = resType->inner;
+
+  uint32_t compCount = 1;
+  // get the inner type for a vector
+  if(resType->type == Type::Vector)
+  {
+    compCount = resType->elemCount;
+    resType = resType->inner;
+  }
+
+  fmt.compType = CompType::Typeless;
+  if(resType->type == Type::Scalar)
+  {
+    fmt.numComps = compCount;
+    fmt.byteWidth = resType->bitWidth / 8;
+    fmt.stride = fmt.byteWidth * fmt.numComps;
+    if(resType->scalarType == Type::ScalarKind::Int)
+    {
+      if(resType->bitWidth == 32)
+        fmt.compType = CompType::SInt;
+    }
+    else if(resType->scalarType == Type::ScalarKind::Float)
+    {
+      if(resType->bitWidth == 32)
+        fmt.compType = CompType::Float;
+    }
+  }
+  else if(resType->type == Type::Struct)
+  {
+    fmt.numComps = 0;
+    fmt.byteWidth = 0;
+    fmt.stride = 0;
+  }
+}
+
 static void FillViewFmtFromVarType(VarType type, DXILDebug::ViewFmt &fmt)
 {
   switch(type)
@@ -1365,9 +1373,11 @@ void ResourceReferenceInfo::Create(const DXIL::ResourceReference *resRef, uint32
   {
     case DXIL::ResourceClass::SRV:
     {
-      srvData.dim = ConvertResourceKindToResourceDimension(resRef->resourceBase.srvData.shape);
+      srvData.dim = (DXDebug::ResourceDimension)ConvertResourceKindToResourceDimension(
+          resRef->resourceBase.srvData.shape);
       srvData.sampleCount = resRef->resourceBase.srvData.sampleCount;
-      srvData.compType = ConvertComponentTypeToResourceRetType(resRef->resourceBase.srvData.compType);
+      srvData.compType = (DXDebug::ResourceRetType)ConvertComponentTypeToResourceRetType(
+          resRef->resourceBase.srvData.compType);
       varType = VarType::ReadOnlyResource;
 
       switch(resRef->resourceBase.srvData.shape)
@@ -1533,7 +1543,7 @@ ThreadState::ThreadState(Debugger &debugger, const GlobalState &globalState, uin
 ThreadState::~ThreadState()
 {
   THREADSTATE_CHECK_DEBUGGER_THREAD();
-  for(const auto &it : m_Memory.m_Allocations)
+  for(auto it : m_Memory.m_Allocations)
   {
     if(it.second.localMemory)
       free(it.second.backingMemory);
@@ -1688,7 +1698,7 @@ void ThreadState::FillCallstack(ShaderDebugState &state)
   }
 }
 
-static bool IsNopInstruction(const Instruction &inst)
+bool IsNopInstruction(const Instruction &inst)
 {
   if(inst.op == Operation::Call)
   {
@@ -2385,6 +2395,7 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
               SetStepNeedsDeviceThread();
               break;
             }
+            RDCASSERT(m_DirectHeapAccessBindings.count(resultId) == 0);
             m_DirectHeapAccessBindings[resultId] = resRefInfo;
 
             // Default to unannotated handle
@@ -2410,6 +2421,7 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
               // Update m_DirectHeapAccessBindings for the annotated handle
               // to use the data from the source resource
               RDCASSERT(m_DirectHeapAccessBindings.count(baseResourceId) > 0);
+              RDCASSERT(m_DirectHeapAccessBindings.count(resultId) == 0);
               m_DirectHeapAccessBindings[resultId] = m_DirectHeapAccessBindings.at(baseResourceId);
             }
             else
@@ -2463,19 +2475,16 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
             }
             else if(resKind == ResourceKind::CBuffer)
             {
-              if(!resource.IsDirectAccess())
+              // Create the cbuffer handle reference for the annotated handle
+              auto it = m_ConstantBlockHandles.find(baseResourceId);
+              if(it != m_ConstantBlockHandles.end())
               {
-                // Create the cbuffer handle reference for the annotated handle
-                auto it = m_ConstantBlockHandles.find(baseResourceId);
-                if(it != m_ConstantBlockHandles.end())
-                {
-                  m_ConstantBlockHandles[resultId] = it->second;
-                }
-                else
-                {
-                  RDCERR("Annotated handle resName:%s %s has no cbuffer handle reference %u",
-                         resName.c_str(), baseResource.c_str(), baseResourceId);
-                }
+                m_ConstantBlockHandles[resultId] = it->second;
+              }
+              else
+              {
+                RDCERR("Annotated handle resName:%s %s has no cbuffer handle reference %u",
+                       resName.c_str(), baseResource.c_str(), baseResourceId);
               }
             }
             // Store the annotate properties for the result
@@ -2511,7 +2520,7 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
             if(resRef)
             {
               const rdcarray<ShaderVariable> *list = NULL;
-              // try to find a static known handle which should be in the global resources container
+              // a static known handle which should be in the global resources container
               switch(resRef->resourceBase.resClass)
               {
                 case ResourceClass::CBuffer: list = &m_GlobalState.constantBlocks; break;
@@ -2524,7 +2533,7 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
               };
               RDCASSERT(list);
 
-              rdcstr resName = Debugger::GetResourceBaseName(&m_Program, resRef->resourceBase);
+              rdcstr resName = Debugger::GetResourceBaseName(&m_Program, resRef);
 
               const rdcarray<ShaderVariable> &resources = *list;
               result.name.clear();
@@ -2538,11 +2547,6 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
                   break;
                 }
               }
-              // arrayed SRV/UAV/Sampler resource : force dynamic lookup
-              if((resRef->resourceBase.resClass != ResourceClass::CBuffer) &&
-                 (resRef->resourceBase.regCount > 1))
-                result.name.clear();
-
               if(result.name.isEmpty())
               {
                 if((resRef->resourceBase.resClass == ResourceClass::SRV) ||
@@ -2558,23 +2562,11 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
                     uint32_t arrayIndex = arg.value.u32v[0];
                     RDCASSERT(arrayIndex >= resRef->resourceBase.regBase);
                     arrayIndex -= resRef->resourceBase.regBase;
-                    DescriptorCategory category = DescriptorCategory::Unknown;
-                    if(resRef->resourceBase.resClass == ResourceClass::SRV)
-                    {
-                      category = DescriptorCategory::ReadOnlyResource;
-                      result.type = VarType::ReadOnlyResource;
-                    }
-                    else if(resRef->resourceBase.resClass == ResourceClass::UAV)
-                    {
-                      category = DescriptorCategory::ReadWriteResource;
-                      result.type = VarType::ReadWriteResource;
-                    }
-                    else if(resRef->resourceBase.resClass == ResourceClass::Sampler)
-                    {
-                      category = DescriptorCategory::Sampler;
-                      result.type = VarType::Sampler;
-                    }
+                    bool isSRV = (resRef->resourceBase.resClass == ResourceClass::SRV);
+                    DescriptorCategory category = isSRV ? DescriptorCategory::ReadOnlyResource
+                                                        : DescriptorCategory::ReadWriteResource;
                     result.SetBindIndex(ShaderBindIndex(category, resRef->resourceIndex, arrayIndex));
+                    result.type = isSRV ? VarType::ReadOnlyResource : VarType::ReadWriteResource;
                     // Default to unannotated handle
                     ClearAnnotatedHandle(result);
                   }
@@ -2586,11 +2578,8 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
                 }
                 else
                 {
-                  m_Debugger.AddDebugMessage(
-                      MessageCategory::Execution, MessageSeverity::High,
-                      MessageSource::RuntimeWarning,
-                      StringFormat::Fmt("Unknown resource handle %s class %s", resName.c_str(),
-                                        ToStr(resRef->resourceBase.resClass).c_str()));
+                  RDCERR("Unknown resource handle %s class %s", resName.c_str(),
+                         ToStr(resRef->resourceBase.resClass).c_str());
                 }
               }
               else
@@ -2607,7 +2596,14 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
                       RDCASSERT(GetShaderVariable(inst.args[resIndexArgId], opCode, dxOpCode, arg));
                       arrayIndex = arg.value.u32v[0];
                       RDCASSERT(arrayIndex >= resRef->resourceBase.regBase);
-                      arrayIndex -= resRef->resourceBase.regBase;
+                      if(arrayIndex >= resRef->resourceBase.regBase)
+                      {
+                        arrayIndex -= resRef->resourceBase.regBase;
+                        RDCASSERT(arrayIndex < result.members.size(), arrayIndex,
+                                  result.members.size());
+                        if(arrayIndex < result.members.size())
+                          RDCASSERT(!result.members[arrayIndex].members.empty());
+                      }
                     }
                     else
                     {
@@ -2642,7 +2638,7 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
                   auto it = m_GlobalState.constantBlocksDatas.find(constantBlockRef);
                   if(it != m_GlobalState.constantBlocksDatas.end())
                   {
-                    const bytebuf &cbufferData = it->second.bufferData;
+                    const bytebuf &cbufferData = it->second;
                     if(cbufferData.size() != 0)
                     {
                       size_t offset = 0;
@@ -2659,19 +2655,12 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
                     }
                     else
                     {
-                      m_Debugger.AddDebugMessage(
-                          MessageCategory::Execution, MessageSeverity::High,
-                          MessageSource::RuntimeWarning,
-                          StringFormat::Fmt("cbuffer data is empty %s", resultSSAName.c_str()));
+                      RDCERR("No data for constant block %s", result.name.c_str());
                     }
                   }
                   else
                   {
-                    m_Debugger.AddDebugMessage(
-                        MessageCategory::Execution, MessageSeverity::High,
-                        MessageSource::RuntimeWarning,
-                        StringFormat::Fmt("Failed to find data for cbuffer %s",
-                                          resultSSAName.c_str()));
+                    RDCERR("Can't find the data for constant block %s", result.name.c_str());
                   }
                   result = cbufferVar;
                 }
@@ -2679,9 +2668,7 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
             }
             else
             {
-              m_Debugger.AddDebugMessage(
-                  MessageCategory::Execution, MessageSeverity::High, MessageSource::RuntimeWarning,
-                  StringFormat::Fmt("Unknown Resource %s", resultSSAName.c_str()));
+              RDCERR("Unknown Base Resource for %s", resultSSAName.c_str());
             }
             result.name = resultSSAName;
             break;
@@ -2705,67 +2692,42 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
             uint32_t regIndex = arg.value.u32v[0];
 
             RDCASSERT(m_Live[handleId]);
-            ShaderVariable handleVar;
-
-            bool annotatedHandle = false;
-            ResourceReferenceInfo resRefInfo = GetResource(handleId, annotatedHandle, handleVar);
-            if(!resRefInfo.Valid())
-            {
-              RDCERR("Invalid cbuffer resource %u", handleId);
-              break;
-            }
+            const ShaderVariable &handleVar = m_Variables[handleId];
 
             result.value.u32v[0] = 0;
             result.value.u32v[1] = 0;
             result.value.u32v[2] = 0;
             result.value.u32v[3] = 0;
-            if(handleVar.IsDirectAccess())
+            auto constantBlockRefIt = m_ConstantBlockHandles.find(handleId);
+            if(constantBlockRefIt != m_ConstantBlockHandles.end())
             {
-              const BindingSlot &slot = resRefInfo.binding;
-              if(m_Debugger.LoadCBVData(slot, regIndex, result.value) == DeviceOpResult::NeedsDevice)
+              const ConstantBlockReference &constantBlockRef = constantBlockRefIt->second;
+              auto it = m_GlobalState.constantBlocksDatas.find(constantBlockRef);
+              if(it != m_GlobalState.constantBlocksDatas.end())
               {
-                SetStepNeedsDeviceThread();
-                break;
-              }
-            }
-            else
-            {
-              auto constantBlockRefIt = m_ConstantBlockHandles.find(handleId);
-              if(constantBlockRefIt != m_ConstantBlockHandles.end())
-              {
-                const ConstantBlockReference &constantBlockRef = constantBlockRefIt->second;
-                auto it = m_GlobalState.constantBlocksDatas.find(constantBlockRef);
-                if(it != m_GlobalState.constantBlocksDatas.end())
+                const bytebuf &cbufferData = it->second;
+                const uint32_t bufferSize = (uint32_t)cbufferData.size();
+                const uint32_t maxIndex = AlignUp16(bufferSize) / 16;
+                RDCASSERTMSG("Out of bounds cbuffer load", regIndex < maxIndex, regIndex, maxIndex);
+                if(regIndex < maxIndex)
                 {
-                  const bytebuf &cbufferData = it->second.bufferData;
-                  const uint32_t dataSize = (uint32_t)(it->second.byteSize);
-                  const uint32_t maxIndex = AlignUp16(dataSize) / 16;
-                  RDCASSERTMSG("Out of bounds cbuffer load", regIndex < maxIndex, regIndex, maxIndex);
-                  if(regIndex < maxIndex)
-                  {
-                    const uint32_t dataOffset = regIndex * 16;
-                    const uint32_t byteWidth = 4;
-                    const byte *base = cbufferData.data() + dataOffset;
-                    const uint32_t *data = (const uint32_t *)base;
-                    const uint32_t numComps = RDCMIN(4U, (dataSize - dataOffset) / byteWidth);
-                    for(uint32_t c = 0; c < numComps; c++)
-                      result.value.u32v[c] = data[c];
-                  }
-                }
-                else
-                {
-                  m_Debugger.AddDebugMessage(MessageCategory::Execution, MessageSeverity::High,
-                                             MessageSource::RuntimeWarning,
-                                             StringFormat::Fmt("Failed to find data for cbuffer %s",
-                                                               handleVar.name.c_str()));
+                  const uint32_t dataOffset = regIndex * 16;
+                  const uint32_t byteWidth = 4;
+                  const byte *base = cbufferData.data() + dataOffset;
+                  const uint32_t *data = (const uint32_t *)base;
+                  const uint32_t numComps = RDCMIN(4U, (bufferSize - dataOffset) / byteWidth);
+                  for(uint32_t c = 0; c < numComps; c++)
+                    result.value.u32v[c] = data[c];
                 }
               }
               else
               {
-                m_Debugger.AddDebugMessage(
-                    MessageCategory::Execution, MessageSeverity::High, MessageSource::RuntimeWarning,
-                    StringFormat::Fmt("Failed to find cbuffer %s", handleVar.name.c_str()));
+                RDCERR("Failed to find data for constant block data for %s", handleVar.name.c_str());
               }
+            }
+            else
+            {
+              RDCERR("Failed to find data for cbuffer %s", handleVar.name.c_str());
             }
 
             // DXIL will create a vector of a single type with total size of 16-bytes
@@ -5031,7 +4993,7 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
           case DXOp::TextureGatherRaw:
             // Gather raw elements from 4 texels with no type conversions (SRV type is constrained)
 
-          // SM 6.8
+          // SM 6.8 : when SM6.8 is supporting by RenderDoc
           case DXOp::StartVertexLocation:
             // SV_BaseVertexLocation
             // BaseVertexLocation from DrawIndexedInstanced or StartVertexLocation from DrawInstanced
@@ -5040,10 +5002,6 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
             // StartInstanceLocation from Draw*Instanced
           case DXOp::BarrierByMemoryType:
           case DXOp::BarrierByMemoryHandle:
-
-          // SM 6.9 - could be used with normal vectors
-          case DXOp::RawBufferVectorLoad:
-          case DXOp::RawBufferVectorStore:
 
           // No plans to implement
 
@@ -5071,11 +5029,6 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
           case DXOp::TempRegStore:
           case DXOp::MinPrecXRegLoad:
           case DXOp::MinPrecXRegStore:
-
-          // long vectors
-          case DXOp::VectorReduceAnd:
-          case DXOp::VectorReduceOr:
-          case DXOp::FDot:
 
           // Mesh Shaders
           case DXOp::SetMeshOutputCounts:
@@ -5170,35 +5123,6 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
           case DXOp::RayQuery_CandidateInstanceContributionToHitGroupIndex:
           case DXOp::RayQuery_CommittedInstanceContributionToHitGroupIndex:
           case DXOp::GeometryIndex:
-          case DXOp::AllocateRayQuery2:
-          case DXOp::HitObject_TraceRay:
-          case DXOp::HitObject_FromRayQuery:
-          case DXOp::HitObject_FromRayQueryWithAttrs:
-          case DXOp::HitObject_MakeMiss:
-          case DXOp::HitObject_MakeNop:
-          case DXOp::HitObject_Invoke:
-          case DXOp::MaybeReorderThread:
-          case DXOp::HitObject_IsMiss:
-          case DXOp::HitObject_IsHit:
-          case DXOp::HitObject_IsNop:
-          case DXOp::HitObject_RayFlags:
-          case DXOp::HitObject_RayTMin:
-          case DXOp::HitObject_RayTCurrent:
-          case DXOp::HitObject_WorldRayOrigin:
-          case DXOp::HitObject_WorldRayDirection:
-          case DXOp::HitObject_ObjectRayOrigin:
-          case DXOp::HitObject_ObjectRayDirection:
-          case DXOp::HitObject_ObjectToWorld3x4:
-          case DXOp::HitObject_WorldToObject3x4:
-          case DXOp::HitObject_GeometryIndex:
-          case DXOp::HitObject_InstanceIndex:
-          case DXOp::HitObject_InstanceID:
-          case DXOp::HitObject_PrimitiveIndex:
-          case DXOp::HitObject_HitKind:
-          case DXOp::HitObject_ShaderTableIndex:
-          case DXOp::HitObject_SetShaderTableIndex:
-          case DXOp::HitObject_LoadLocalRootTableConstant:
-          case DXOp::HitObject_Attributes:
 
           // Workgraphs
           case DXOp::AllocateNodeOutputRecords:
@@ -5439,6 +5363,7 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
       result.type = baseType;
       result.rows = (uint8_t)countElems;
 
+      RDCASSERT(offset + size <= allocation.size);
       if(offset + size <= allocation.size)
       {
         memory += offset;
@@ -5452,10 +5377,7 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
       }
       else
       {
-        m_Debugger.AddDebugMessage(
-            MessageCategory::Execution, MessageSeverity::High, MessageSource::RuntimeWarning,
-            StringFormat::Fmt("Pointer %s invalid offset %u size %u for allocation size %u GSM %d",
-                              result.name.c_str(), offset, size, allocation.size, allocation.gsm));
+        RDCERR("Invalid GEP offset %u size %u for allocation size %u", offset, size, allocation.size);
       }
       break;
     }
@@ -6314,7 +6236,6 @@ bool ThreadState::ExecuteInstruction(const rdcarray<ThreadState> &workgroup)
     }
     case Operation::CompareExchange:
     {
-      SCOPED_LOCK(m_Debugger.GetAtomicMemoryLock());
       OperationAtomic(inst, opCode, dxOpCode, resultId, result);
       break;
     }
@@ -6461,20 +6382,7 @@ bool ThreadState::GetShaderVariableHelper(const DXIL::Value *dxilValue, DXIL::Op
     }
     else if(c->isLiteral())
     {
-      if(c->type->bitWidth == 64)
-      {
-        var.value.u64v[0] = c->getU64();
-      }
-      else if(c->type->bitWidth == 1)
-      {
-        // Special case for 1-bit types : which should be bool's : debugger convention is true is 1, false is 0
-        RDCASSERTEQUAL(var.type, VarType::Bool);
-        var.value.u8v[0] = (c->getU32() != 0) ? 1 : 0;
-      }
-      else
-      {
-        var.value.u32v[0] = c->getU32();
-      }
+      var.value.u64v[0] = c->getU64();
       return true;
     }
     else if(c->isNULL())
@@ -7309,7 +7217,7 @@ void ThreadState::ExecuteMemoryBarrier()
 
 GlobalState::~GlobalState()
 {
-  for(const auto &it : memory.m_Allocations)
+  for(auto it : memory.m_Allocations)
   {
     RDCASSERT(!it.second.localMemory);
     free(it.second.backingMemory);
@@ -7931,11 +7839,11 @@ Debugger::DebugInfo::~DebugInfo()
 
 // static helper function
 rdcstr Debugger::GetResourceBaseName(const DXIL::Program *program,
-                                     const DXIL::EntryPointInterface::ResourceBase &resourceBase)
+                                     const DXIL::ResourceReference *resRef)
 {
-  rdcstr resName = resourceBase.name;
+  rdcstr resName = resRef->resourceBase.name;
   // Special case for cbuffer arrays
-  if((resourceBase.resClass == ResourceClass::CBuffer) && (resourceBase.regCount > 1))
+  if((resRef->resourceBase.resClass == ResourceClass::CBuffer) && (resRef->resourceBase.regCount > 1))
   {
     // Remove any array suffix that might have been appended to the resource name
     int offs = resName.find('[');
@@ -7952,34 +7860,17 @@ rdcstr Debugger::GetResourceReferenceName(const DXIL::Program *program,
   RDCASSERT(program);
   for(const ResourceReference &resRef : program->m_ResourceReferences)
   {
-    const EntryPointInterface::ResourceBase &resBase = resRef.resourceBase;
-    if(resBase.resClass != resClass)
+    if(resRef.resourceBase.resClass != resClass)
+      continue;
+    if(resRef.resourceBase.space != slot.registerSpace)
+      continue;
+    if(resRef.resourceBase.regBase > slot.shaderRegister)
+      continue;
+    if(resRef.resourceBase.regBase + resRef.resourceBase.regCount <= slot.shaderRegister)
       continue;
 
-    if(resBase.MatchesBinding(slot.shaderRegister, slot.shaderRegister, slot.registerSpace))
-      return GetResourceBaseName(program, resBase);
+    return GetResourceBaseName(program, &resRef);
   }
-
-  const EntryPointInterface *entryPointIf = program->GetEntryPointInterface();
-  const rdcarray<EntryPointInterface::ResourceBase> *resList = NULL;
-  if(resClass == ResourceClass::CBuffer)
-    resList = &entryPointIf->cbuffers;
-  else if(resClass == ResourceClass::SRV)
-    resList = &entryPointIf->srvs;
-  else if(resClass == ResourceClass::UAV)
-    resList = &entryPointIf->uavs;
-  else if(resClass == ResourceClass::Sampler)
-    resList = &entryPointIf->samplers;
-
-  if(resList)
-  {
-    for(const EntryPointInterface::ResourceBase &resBase : *resList)
-    {
-      if(resBase.MatchesBinding(slot.shaderRegister, slot.shaderRegister, slot.registerSpace))
-        return GetResourceBaseName(program, resBase);
-    }
-  }
-
   RDCERR("Failed to find DXIL %s Resource Space %d Register %d", ToStr(resClass).c_str(),
          slot.registerSpace, slot.shaderRegister);
   return "UNKNOWN_RESOURCE_HANDLE";
@@ -8008,11 +7899,10 @@ ScopedDebugData *Debugger::FindScopedDebugData(const DXIL::Metadata *md) const
 
 const DXIL::Metadata *Debugger::GetMDScope(const DXIL::Metadata *scopeMD) const
 {
-  // Iterate upwards to find DIFile, DISubprogram, DILexicalBlock or DILexicalBlockFile scope
+  // Iterate upwards to find DIFile, DISubprogram or DILexicalBlock scope
   while(scopeMD && (scopeMD->dwarf->type != DIBase::File) &&
         (scopeMD->dwarf->type != DIBase::Subprogram) &&
-        (scopeMD->dwarf->type != DIBase::LexicalBlock) &&
-        (scopeMD->dwarf->type != DIBase::LexicalBlockFile))
+        (scopeMD->dwarf->type != DIBase::LexicalBlock))
     scopeMD = m_Program->GetDebugScopeParent(scopeMD->dwarf);
 
   return scopeMD;
@@ -9345,6 +9235,9 @@ ShaderDebugTrace *Debugger::BeginDebug(DebugAPIWrapper *apiWrapper, uint32_t eve
     for(uint32_t i = 0; i < list.resources.size(); i++)
     {
       const ShaderResource &res = list.resources[i];
+      // Ignore arrays the debugger execution will mark specific array elements used
+      if(res.bindArraySize > 1)
+        continue;
 
       // Fetch the resource name
       BindingSlot slot(res.fixedBindNumber, res.fixedBindSetOrSpace);
@@ -9401,8 +9294,6 @@ ShaderDebugTrace *Debugger::BeginDebug(DebugAPIWrapper *apiWrapper, uint32_t eve
     ref.type = DebugVariableType::Sampler;
     ref.name = shaderVar.name;
     sourceVar.variables.push_back(ref);
-
-    ret->sourceVars.push_back(sourceVar);
   }
 
   m_LiveGlobals.resize(maxSSAId);
@@ -9764,10 +9655,6 @@ ShaderDebugTrace *Debugger::BeginDebug(DebugAPIWrapper *apiWrapper, uint32_t eve
               else if(dwarf->type == DIBase::LexicalBlock)
               {
                 scopeMD = dwarf->As<DILexicalBlock>()->scope;
-              }
-              else if(dwarf->type == DIBase::LexicalBlockFile)
-              {
-                scopeMD = dwarf->As<DILexicalBlockFile>()->scope;
               }
               else if(dwarf->type == DIBase::File)
               {
@@ -10386,7 +10273,6 @@ rdcarray<ShaderDebugState> Debugger::ContinueDebug()
 
     do
     {
-      ProcessQueuedDebugMessages();
       ProcessQueuedDeviceThreadSteps();
       // Convert the simulation threads queued operations into pending operations i.e. GPU commands
       ProcessQueuedOps();
@@ -10588,20 +10474,13 @@ bool Debugger::TypedResourceStore(DXIL::ResourceClass resClass, const BindingSlo
     DXIL_DEBUG_RDCASSERT(m_ApiWrapper->IsUAVCached(slot));
     return m_ApiWrapper->TypedUAVStore(slot, fmt, dataOffset, value);
   }
+  else if(resClass == DXIL::ResourceClass::SRV)
+  {
+    DXIL_DEBUG_RDCASSERT(m_ApiWrapper->IsSRVCached(slot));
+    return m_ApiWrapper->TypedSRVStore(slot, fmt, dataOffset, value);
+  }
   RDCERR("Unexpected resource class %s", ToStr(resClass).c_str());
   return false;
-}
-
-// Called from any thread
-DeviceOpResult Debugger::LoadCBVData(const BindingSlot &slot, uint32_t regIndex, ShaderValue &value)
-{
-  if(!IsDeviceThread() && !m_ApiWrapper->IsCBVCached(slot))
-    return DeviceOpResult::NeedsDevice;
-
-  m_ApiWrapper->GetCBV(slot);
-
-  value = m_ApiWrapper->CBVLoad(slot, regIndex);
-  return DeviceOpResult::Succeeded;
 }
 
 // Called from any thread
@@ -10629,7 +10508,7 @@ DeviceOpResult Debugger::GetResourceInfo(DXIL::ResourceClass resClass,
                                          const DXDebug::BindingSlot &slot, uint32_t mipLevel,
                                          ShaderVariable &result) const
 {
-  if(!IsDeviceThread() && !m_ApiWrapper->IsResourceInfoCached(resClass, slot, mipLevel))
+  if(!IsDeviceThread() && !m_ApiWrapper->IsResourceInfoCached(slot, mipLevel))
     return DeviceOpResult::NeedsDevice;
 
   result = m_ApiWrapper->GetResourceInfo(resClass, slot, mipLevel);
@@ -11008,25 +10887,6 @@ void Debugger::SimulationJobHelper()
       }
     }
   };
-}
-
-// Must be called from the replay manager thread (the debugger thread)
-void Debugger::ProcessQueuedDebugMessages()
-{
-  rdcarray<DebugMessage> msgs;
-  {
-    SCOPED_LOCK(m_QueuedDebugMessagesLock);
-    m_QueuedDebugMessages.swap(msgs);
-  }
-  for(const DebugMessage &dbgMsg : msgs)
-    m_ApiWrapper->AddDebugMessage(dbgMsg.cat, dbgMsg.sev, dbgMsg.src, dbgMsg.desc);
-}
-
-// Called from any thread
-void Debugger::AddDebugMessage(MessageCategory c, MessageSeverity sv, MessageSource src, rdcstr d) const
-{
-  SCOPED_LOCK(m_QueuedDebugMessagesLock);
-  m_QueuedDebugMessages.push_back({c, sv, src, d});
 }
 
 };    // namespace DXILDebug

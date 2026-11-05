@@ -1,3 +1,4 @@
+import copy
 import rdtest
 import renderdoc as rd
 
@@ -6,20 +7,19 @@ class VK_Dynamic_Rendering(rdtest.TestCase):
     demos_test_name = 'VK_Dynamic_Rendering'
 
     def check_capture(self):
-        out = self.controller.CreateOutput(
-            rd.CreateHeadlessWindowingData(100, 100), rd.ReplayOutputType.Texture
-        )
+        out: rd.ReplayOutput = self.controller.CreateOutput(rd.CreateHeadlessWindowingData(100, 100),
+                                                            rd.ReplayOutputType.Texture)
 
         for cmdLevel in [0, 1]:
-            action = self.find_action(f"Draw {cmdLevel}").nextAction
+            action = self.find_action("Draw {}".format(cmdLevel)).next
 
-            assert action is not None
+            self.check(action is not None)
 
-            self.set_event(action.eventId, False)
+            self.controller.SetFrameEvent(action.eventId, False)
 
             postgs_data = self.get_postvs(action, rd.MeshDataStage.GSOut, 0, action.numIndices)
 
-            postgs_ref: rdtest.MeshReference = {
+            postgs_ref = {
                 0: {
                     'vtx': 0,
                     'idx': 0,
@@ -61,14 +61,16 @@ class VK_Dynamic_Rendering(rdtest.TestCase):
 
             # only expect two accesses, the buffer we actually use and the push constants
             if len(access) != 2:
-                raise rdtest.TestFailureException(f"Only expected two descriptor accesses, but saw {len(access)}")
+                raise rdtest.TestFailureException("Only expected two descriptor accesses, but saw {}".format(
+                    len(access)))
 
             if not (rd.DescriptorType.ReadWriteBuffer, 0, 17) in [(a.type, a.index, a.arrayElement) for a in access]:
                 raise rdtest.TestFailureException(
-                    f"Graphics bind 0[17] isn't the accessed RW buffer descriptor {rd.DumpObject(access)!s}")
+                    f"Graphics bind 0[17] isn't the accessed RW buffer descriptor {str(rd.DumpObject(access))}")
 
             if len(vkpipe.graphics.descriptorSets) != 1:
-                raise rdtest.TestFailureException(f"Wrong number of sets is bound: {len(vkpipe.graphics.descriptorSets)}, not 1")
+                raise rdtest.TestFailureException("Wrong number of sets is bound: {}, not 1".format(
+                    len(vkpipe.graphics.descriptorSets)))
 
             rdtest.log.success("Dynamic usage is as expected")
 

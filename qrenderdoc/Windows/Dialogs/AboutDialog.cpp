@@ -27,7 +27,6 @@
 #include <QLabel>
 #include <QString>
 #include "Code/QRDUtils.h"
-#include "Code/pyrenderdoc/PythonContext.h"
 #include "ui_AboutDialog.h"
 #include "version.h"
 
@@ -49,10 +48,7 @@ AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent), ui(new Ui::AboutDia
                              .arg(hash.left(8)));
   }
 
-  ui->version->setText(tr("%1 (Qt %2) (Python %3)")
-                           .arg(ui->version->text())
-                           .arg(lit(QT_VERSION_STR))
-                           .arg(PythonContext::versionString()));
+  ui->version->setText(tr("%1 (Qt version %2)").arg(ui->version->text()).arg(lit(QT_VERSION_STR)));
 
 #if defined(DISTRIBUTION_VERSION)
   ui->owner->setText(QFormatStr("Baldur Karlsson - Packaged for %1").arg(lit(DISTRIBUTION_NAME)));

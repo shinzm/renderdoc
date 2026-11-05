@@ -61,8 +61,6 @@
 // class as the allocator (second) template argument.
 //
 
-#include "visibility.h"
-
 #include <cstddef>
 #include <cstring>
 #include <vector>
@@ -182,7 +180,6 @@ public:
     // Call allocate() to actually acquire memory.  Returns nullptr if no memory
     // available, otherwise a properly aligned pointer to 'numBytes' of memory.
     //
-    GLSLANG_EXPORT_FOR_TESTS
     void* allocate(size_t numBytes);
 
     //
@@ -259,7 +256,6 @@ private:
 // different times.  But a simple use is to have a global pop
 // with everyone using the same global allocator.
 //
-GLSLANG_EXPORT_FOR_TESTS
 extern TPoolAllocator& GetThreadPoolAllocator();
 void SetThreadPoolAllocator(TPoolAllocator* poolAllocator);
 
@@ -293,7 +289,7 @@ public:
 
     template<class Other>
         pool_allocator(const pool_allocator<Other>& p) : allocator(p.getAllocator()) { }
-    
+
     pointer allocate(size_type n) {
         return reinterpret_cast<pointer>(getAllocator().allocate(n * sizeof(T))); }
     pointer allocate(size_type n, const void*) {

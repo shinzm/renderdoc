@@ -617,12 +617,7 @@ DXBC::Reflection *Program::GuessReflection()
 
 rdcstr Program::GetDebugStatus()
 {
-  if(m_Reflection)
-    for(const DXBC::CBuffer &c : m_Reflection->CBuffers)
-      if(c.bindCount == ~0U)
-        return "Unsupported unbounded ConstantBuffer array";
-
-  // if there are no vendor extensions this is always debuggable for <=SM5.0
+  // if there are no vendor extensions this is always debuggable
   if(m_ShaderExt.second == ~0U)
     return rdcstr();
 

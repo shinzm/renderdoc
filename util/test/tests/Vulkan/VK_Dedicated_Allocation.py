@@ -8,13 +8,11 @@ class VK_Dedicated_Allocation(rdtest.TestCase):
     def check_capture(self):
         action = self.find_action("Draw")
 
-        assert action is not None
-
-        self.set_event(action.eventId, True)
+        self.controller.SetFrameEvent(action.eventId, True)
 
         postvs_data = self.get_postvs(action, rd.MeshDataStage.VSOut, 0, action.numIndices)
 
-        postvs_ref: rdtest.MeshReference = {
+        postvs_ref = {
             0: {
                 'vtx': 0,
                 'idx': 0,
@@ -45,7 +43,7 @@ class VK_Dedicated_Allocation(rdtest.TestCase):
 
         rdtest.log.success('Mesh data is as expected')
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         self.check_pixel_value(pipe.GetOutputTargets()[0].resource, 155, 195, [1.0, 0.0, 0.09, 1.0], eps=1.0/255.0)
         self.check_pixel_value(pipe.GetOutputTargets()[0].resource, 190, 195, [0.0, 1.0, 0.09, 1.0], eps=1.0/255.0)

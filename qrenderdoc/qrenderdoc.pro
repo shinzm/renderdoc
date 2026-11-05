@@ -177,13 +177,11 @@ SOURCES += Code/qrenderdoc.cpp \
     Code/Resources.cpp \
     Code/RGPInterop.cpp \
     Code/pyrenderdoc/PythonContext.cpp \
-    Code/pyrenderdoc/PythonInvokers.cpp \
     Code/Interface/QRDInterface.cpp \
     Code/Interface/Analytics.cpp \
     Code/Interface/ShaderProcessingTool.cpp \
-    Code/Interface/PersistentConfig.cpp \
+    Code/Interface/PersistantConfig.cpp \
     Code/Interface/RemoteHost.cpp \
-    Code/Interface/Helpers.cpp \
     Styles/StyleData.cpp \
     Styles/RDStyle/RDStyle.cpp \
     Styles/RDTweakedNativeStyle/RDTweakedNativeStyle.cpp \
@@ -205,7 +203,6 @@ SOURCES += Code/qrenderdoc.cpp \
     Widgets/Extended/RDDoubleSpinBox.cpp \
     Widgets/Extended/RDListView.cpp \
     Widgets/ComputeDebugSelector.cpp \
-    Widgets/PixelDebugSelector.cpp \
     Widgets/CustomPaintWidget.cpp \
     Widgets/ResourcePreview.cpp \
     Widgets/ThumbnailStrip.cpp \
@@ -225,7 +222,6 @@ SOURCES += Code/qrenderdoc.cpp \
     Windows/PipelineState/D3D12PipelineStateViewer.cpp \
     Windows/PipelineState/GLPipelineStateViewer.cpp \
     Widgets/Extended/RDTreeView.cpp \
-    Widgets/Extended/RDToolTip.cpp \
     Widgets/Extended/RDTreeWidget.cpp \
     Widgets/BufferFormatSpecifier.cpp \
     Windows/BufferViewer.cpp \
@@ -272,8 +268,7 @@ HEADERS += Code/CaptureContext.h \
     Code/pyrenderdoc/interface_check.h \
     Code/Interface/QRDInterface.h \
     Code/Interface/Analytics.h \
-    Code/Interface/PersistentConfig.h \
-    Code/Interface/Helpers.h \
+    Code/Interface/PersistantConfig.h \
     Code/Interface/Extensions.h \
     Code/Interface/RemoteHost.h \
     Styles/StyleData.h \
@@ -297,7 +292,6 @@ HEADERS += Code/CaptureContext.h \
     Widgets/Extended/RDDoubleSpinBox.h \
     Widgets/Extended/RDListView.h \
     Widgets/ComputeDebugSelector.h \
-    Widgets/PixelDebugSelector.h \
     Widgets/CustomPaintWidget.h \
     Widgets/ResourcePreview.h \
     Widgets/ThumbnailStrip.h \
@@ -317,7 +311,6 @@ HEADERS += Code/CaptureContext.h \
     Windows/PipelineState/D3D12PipelineStateViewer.h \
     Windows/PipelineState/GLPipelineStateViewer.h \
     Widgets/Extended/RDTreeView.h \
-    Widgets/Extended/RDToolTip.h \
     Widgets/Extended/RDTreeWidget.h \
     Widgets/BufferFormatSpecifier.h \
     Windows/BufferViewer.h \
@@ -371,7 +364,6 @@ FORMS    += Windows/Dialogs/AboutDialog.ui \
     Windows/PipelineState/GLPipelineStateViewer.ui \
     Widgets/BufferFormatSpecifier.ui \
     Widgets/ComputeDebugSelector.ui \
-    Widgets/PixelDebugSelector.ui \
     Windows/BufferViewer.ui \
     Windows/ShaderViewer.ui \
     Windows/ShaderMessageViewer.ui \

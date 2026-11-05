@@ -84,8 +84,8 @@ Pixel History
 .. autoclass:: PixelValue
   :members:
 
-Shader Debugging
-----------------
+Shader Debuging
+---------------
 
 .. autoclass:: DebugPixelInputs
   :members:

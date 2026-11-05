@@ -56,7 +56,7 @@ namespace rdcspv
 static const uint32_t MagicNumber = 0x07230203;
 static const uint32_t VersionMajor = 1;
 static const uint32_t VersionMinor = 6;
-static const uint32_t VersionRevision = 7;
+static const uint32_t VersionRevision = 4;
 static const uint32_t VersionPacked = (1 << 16) | (6 << 8);
 static const uint32_t OpCodeMask = 0xffff;
 static const uint32_t WordCountShift = 16;
@@ -119,8 +119,6 @@ enum class Generator : uint32_t
   Kongruent = 44,
   NuvkSPIRVEmitterandDLSLcompiler = 45,
   Arc3DShaderCompiler = 49,
-  Pred = 50,
-  ApilaJaiCompiler = 51,
 };
 
 enum class ImageOperands : uint32_t
@@ -198,7 +196,6 @@ enum class LoopControl : uint32_t
   NoFusionALTERA = 0x800000,
   LoopCountALTERA = 0x1000000,
   MaxReinvocationDelayALTERA = 0x2000000,
-  MultipleWaitQueuesQCOM = 0x10000000,
   Max,
   Invalid = ~0U,
 };
@@ -282,7 +279,7 @@ enum class RayFlags : uint32_t
   CullNoOpaqueKHR = 0x0080,
   SkipTrianglesKHR = 0x0100,
   SkipAABBsKHR = 0x0200,
-  ForceOpacityMicromap2StateKHR = 0x0400,
+  ForceOpacityMicromap2StateEXT = 0x0400,
   Max,
   Invalid = ~0U,
 };
@@ -328,8 +325,6 @@ enum class SourceLanguage : uint32_t
   Slang = 11,
   Zig = 12,
   Rust = 13,
-  Pred = 14,
-  ApilaJai = 15,
   Max,
   Invalid = ~0U,
 };
@@ -446,7 +441,6 @@ enum class ExecutionMode : uint32_t
   QuadDerivativesKHR = 5088,
   RequireFullQuadsKHR = 5089,
   SharesInputWithAMDX = 5102,
-  ArithmeticPoisonKHR = 5157,
   OutputLinesEXT = 5269,
   OutputPrimitivesEXT = 5270,
   DerivativeGroupQuadsKHR = 5289,
@@ -471,7 +465,6 @@ enum class ExecutionMode : uint32_t
   SchedulerTargetFmaxMhzINTEL = 5903,
   MaximallyReconvergesKHR = 6023,
   FPFastMathDefault = 6028,
-  OpacityMicromapIdKHR = 6031,
   StreamingInterfaceINTEL = 6154,
   RegisterMapInterfaceINTEL = 6160,
   NamedBarrierCountINTEL = 6417,
@@ -711,7 +704,6 @@ enum class LinkageType : uint32_t
   Export = 0,
   Import = 1,
   LinkOnceODR = 2,
-  WeakAMD = 3,
   Max,
   Invalid = ~0U,
 };
@@ -816,7 +808,6 @@ enum class Decoration : uint32_t
   PayloadDispatchIndirectAMDX = 5105,
   ArrayStrideIdEXT = 5124,
   OffsetIdEXT = 5125,
-  UTFEncodedKHR = 5145,
   OverrideCoverageNV = 5248,
   PassthroughNV = 5250,
   ViewportRelativeNV = 5252,
@@ -1158,11 +1149,6 @@ enum class Capability : uint32_t
   CooperativeMatrixLayoutsARM = 4201,
   Float8EXT = 4212,
   Float8CooperativeMatrixEXT = 4213,
-  Float6EXT = 4228,
-  Float4EXT = 4229,
-  Float8UnsignedE8M0EXT = 4230,
-  MXInt8EXT = 4231,
-  BitcastExtractEXT = 4232,
   FragmentShadingRateKHR = 4422,
   SubgroupBallotKHR = 4423,
   DrawParameters = 4427,
@@ -1199,9 +1185,6 @@ enum class Capability : uint32_t
   TileShadingQCOM = 4495,
   CooperativeMatrixConversionQCOM = 4496,
   TextureBlockMatch2QCOM = 4498,
-  MultipleWaitQueuesQCOM = 4539,
-  ImageGatherLinearQCOM = 4543,
-  ImageGatherExtendedModesQCOM = 4544,
   Float16ImageAMD = 5008,
   ImageGatherBiasLodAMD = 5009,
   FragmentMaskAMD = 5010,
@@ -1216,11 +1199,7 @@ enum class Capability : uint32_t
   BFloat16TypeKHR = 5116,
   BFloat16DotProductKHR = 5117,
   BFloat16CooperativeMatrixKHR = 5118,
-  AbortKHR = 5120,
   DescriptorHeapEXT = 5128,
-  ConstantDataKHR = 5146,
-  PoisonFreezeKHR = 5156,
-  WeakLinkageAMD = 5181,
   SampleMaskOverrideCoverageNV = 5249,
   GeometryShaderPassthroughNV = 5251,
   ShaderViewportIndexLayerEXT = 5254,
@@ -1262,7 +1241,7 @@ enum class Capability : uint32_t
   FragmentShaderPixelInterlockEXT = 5378,
   DemoteToHelperInvocation = 5379,
   DisplacementMicromapNV = 5380,
-  RayTracingOpacityMicromapKHR = 5381,
+  RayTracingOpacityMicromapEXT = 5381,
   ShaderInvocationReorderNV = 5383,
   ShaderInvocationReorderEXT = 5388,
   BindlessTextureNV = 5390,
@@ -1284,7 +1263,6 @@ enum class Capability : uint32_t
   CooperativeVectorTrainingNV = 5435,
   RayTracingClusterAccelerationStructureNV = 5437,
   TensorAddressingNV = 5439,
-  CooperativeMatrixDecodeVectorNV = 5447,
   SubgroupShuffleINTEL = 5568,
   SubgroupBufferBlockIOINTEL = 5569,
   SubgroupImageBlockIOINTEL = 5570,
@@ -1338,7 +1316,6 @@ enum class Capability : uint32_t
   GroupNonUniformRotateKHR = 6026,
   FloatControls2 = 6029,
   FMAKHR = 6030,
-  RayTracingOpacityMicromapExecutionModeKHR = 6032,
   AtomicFloat32AddEXT = 6033,
   AtomicFloat64AddEXT = 6034,
   LongCompositesINTEL = 6089,
@@ -1346,7 +1323,7 @@ enum class Capability : uint32_t
   AtomicFloat16AddEXT = 6095,
   DebugInfoModuleINTEL = 6114,
   BFloat16ConversionINTEL = 6115,
-  SplitBarrierEXT = 6141,
+  SplitBarrierINTEL = 6141,
   ArithmeticFenceEXT = 6144,
   FPGAClusterAttributesV2ALTERA = 6150,
   FPGAKernelAttributesv2INTEL = 6161,
@@ -1365,18 +1342,12 @@ enum class Capability : uint32_t
   UntypedVariableLengthArrayINTEL = 6243,
   SpecConditionalINTEL = 6245,
   FunctionVariantsINTEL = 6246,
-  PredicatedIOINTEL = 6257,
-  RoundedDivideSqrtINTEL = 6265,
   GroupUniformArithmeticKHR = 6400,
   TensorFloat32RoundingINTEL = 6425,
   MaskedGatherScatterINTEL = 6427,
   CacheControlsINTEL = 6441,
   RegisterLimitsINTEL = 6460,
   BindlessImagesINTEL = 6528,
-  DotProductFloat16AccFloat32VALVE = 6912,
-  DotProductFloat16AccFloat16VALVE = 6913,
-  DotProductBFloat16AccVALVE = 6914,
-  DotProductFloat8AccFloat32VALVE = 6915,
   Max,
   Invalid = ~0U,
 };
@@ -1473,7 +1444,6 @@ enum class TensorAddressingOperands : uint32_t
   None = 0x0000,
   TensorView = 0x0001,
   DecodeFunc = 0x0002,
-  DecodeVectorFunc = 0x0004,
   Max,
   Invalid = ~0U,
 };
@@ -1544,11 +1514,6 @@ enum class FPEncoding : uint32_t
   BFloat16KHR = 0,
   Float8E4M3EXT = 4214,
   Float8E5M2EXT = 4215,
-  Float6E2M3EXT = 4223,
-  Float6E3M2EXT = 4224,
-  Float4E2M1EXT = 4225,
-  Float8UnsignedE8M0EXT = 4226,
-  MXInt8EXT = 4227,
   Max,
   Invalid = ~0U,
 };
@@ -1580,16 +1545,6 @@ enum class ComponentType : uint32_t
   UnsignedInt8PackedNV = 1000491001,
   FloatE4M3NV = 1000491002,
   FloatE5M2NV = 1000491003,
-  Max,
-  Invalid = ~0U,
-};
-
-enum class GatherModes : uint32_t
-{
-  Gather4x1QCOM = 0,
-  GatherDQCOM = 1,
-  GatherH2QCOM = 2,
-  GatherV2QCOM = 3,
   Max,
   Invalid = ~0U,
 };
@@ -1695,7 +1650,6 @@ struct LoopControlAndParamDatas
   uint32_t speculatedIterationsALTERA = {};
   uint32_t loopCountALTERA = {};
   uint32_t maxReinvocationDelayALTERA = {};
-  uint32_t multipleWaitQueuesQCOM = {};
   
   operator LoopControl() const { return flags; }
   bool operator &(const LoopControl v) const { return bool(flags & v); }
@@ -1739,8 +1693,6 @@ struct LoopControlAndParamDatas
   void unsetLoopCountALTERA() { flags &= ~LoopControl::LoopCountALTERA; }
   void setMaxReinvocationDelayALTERA(uint32_t maxReinvocationDelayALTERAParam) { flags |= LoopControl::MaxReinvocationDelayALTERA; maxReinvocationDelayALTERA = maxReinvocationDelayALTERAParam; }
   void unsetMaxReinvocationDelayALTERA() { flags &= ~LoopControl::MaxReinvocationDelayALTERA; }
-  void setMultipleWaitQueuesQCOM(uint32_t multipleWaitQueuesQCOMParam) { flags |= LoopControl::MultipleWaitQueuesQCOM; multipleWaitQueuesQCOM = multipleWaitQueuesQCOMParam; }
-  void unsetMultipleWaitQueuesQCOM() { flags &= ~LoopControl::MultipleWaitQueuesQCOM; }
 };
 
 struct MemoryAccessAndParamDatas
@@ -1883,7 +1835,6 @@ struct ExecutionModeAndParamData
     uint32_t numSIMDWorkitemsINTEL;
     uint32_t schedulerTargetFmaxMhzINTEL;
     FPFastMathDefaultParams fPFastMathDefault;
-    Id opacityMicromapIdKHR;
     uint32_t streamingInterfaceINTEL;
     uint32_t registerMapInterfaceINTEL;
     uint32_t namedBarrierCountINTEL;
@@ -2029,7 +1980,6 @@ struct TensorAddressingOperandsAndParamDatas
   TensorAddressingOperands flags;
   Id tensorView = {};
   Id decodeFunc = {};
-  Id decodeVectorFunc = {};
   
   operator TensorAddressingOperands() const { return flags; }
   bool operator &(const TensorAddressingOperands v) const { return bool(flags & v); }
@@ -2039,8 +1989,6 @@ struct TensorAddressingOperandsAndParamDatas
   void unsetTensorView() { flags &= ~TensorAddressingOperands::TensorView; }
   void setDecodeFunc(Id decodeFuncParam) { flags |= TensorAddressingOperands::DecodeFunc; decodeFunc = decodeFuncParam; }
   void unsetDecodeFunc() { flags &= ~TensorAddressingOperands::DecodeFunc; }
-  void setDecodeVectorFunc(Id decodeVectorFuncParam) { flags |= TensorAddressingOperands::DecodeVectorFunc; decodeVectorFunc = decodeVectorFuncParam; }
-  void unsetDecodeVectorFunc() { flags &= ~TensorAddressingOperands::DecodeVectorFunc; }
 };
 
 struct TensorOperandsAndParamDatas
@@ -2427,7 +2375,6 @@ enum class Op : uint16_t
   GraphSetOutputARM = 4185,
   GraphEndARM = 4186,
   TypeGraphARM = 4190,
-  BitcastExtractEXT = 4195,
   TerminateInvocation = 4416,
   TypeUntypedPointerKHR = 4417,
   UntypedVariableKHR = 4418,
@@ -2485,7 +2432,6 @@ enum class Op : uint16_t
   CompositeConstructCoopMatQCOM = 4540,
   CompositeExtractCoopMatQCOM = 4541,
   ExtractSubArrayQCOM = 4542,
-  ImageGatherQCOM = 4545,
   GroupIAddNonUniformAMD = 5000,
   GroupFAddNonUniformAMD = 5001,
   GroupFMinNonUniformAMD = 5002,
@@ -2509,14 +2455,9 @@ enum class Op : uint16_t
   GroupNonUniformQuadAnyKHR = 5111,
   TypeBufferEXT = 5115,
   BufferPointerEXT = 5119,
-  AbortKHR = 5121,
   UntypedImageTexelPointerEXT = 5126,
   MemberDecorateIdEXT = 5127,
   ConstantSizeOfEXT = 5129,
-  ConstantDataKHR = 5147,
-  SpecConstantDataKHR = 5148,
-  PoisonKHR = 5158,
-  FreezeKHR = 5159,
   HitObjectRecordHitMotionNV = 5249,
   HitObjectRecordHitWithIndexMotionNV = 5250,
   HitObjectRecordMissMotionNV = 5251,
@@ -2718,8 +2659,8 @@ enum class Op : uint16_t
   CompositeConstructContinuedINTEL = 6096,
   ConvertFToBF16INTEL = 6116,
   ConvertBF16ToFINTEL = 6117,
-  ControlBarrierArriveEXT = 6142,
-  ControlBarrierWaitEXT = 6143,
+  ControlBarrierArriveINTEL = 6142,
+  ControlBarrierWaitINTEL = 6143,
   ArithmeticFenceEXT = 6145,
   SubgroupBlockPrefetchINTEL = 6221,
   Subgroup2DBlockLoadINTEL = 6231,
@@ -2737,8 +2678,6 @@ enum class Op : uint16_t
   SpecConstantArchitectureINTEL = 6252,
   SpecConstantCapabilitiesINTEL = 6253,
   ConditionalCopyObjectINTEL = 6254,
-  PredicatedLoadINTEL = 6258,
-  PredicatedStoreINTEL = 6259,
   GroupIMulKHR = 6401,
   GroupFMulKHR = 6402,
   GroupBitwiseAndKHR = 6403,
@@ -2753,9 +2692,6 @@ enum class Op : uint16_t
   ConvertHandleToImageINTEL = 6529,
   ConvertHandleToSamplerINTEL = 6530,
   ConvertHandleToSampledImageINTEL = 6531,
-  FDot2MixAcc32VALVE = 6916,
-  FDot2MixAcc16VALVE = 6917,
-  FDot4MixAcc32VALVE = 6918,
 
   Max,
 };
@@ -2961,5 +2897,4 @@ DECLARE_STRINGISE_TYPE(rdcspv::MatrixMultiplyAccumulateOperands);
 DECLARE_STRINGISE_TYPE(rdcspv::FPEncoding);
 DECLARE_STRINGISE_TYPE(rdcspv::CooperativeVectorMatrixLayout);
 DECLARE_STRINGISE_TYPE(rdcspv::ComponentType);
-DECLARE_STRINGISE_TYPE(rdcspv::GatherModes);
 DECLARE_STRINGISE_TYPE(rdcspv::TensorOperands);

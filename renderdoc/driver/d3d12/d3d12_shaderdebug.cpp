@@ -670,9 +670,7 @@ ShaderVariable D3D12ShaderDebug::GetResourceInfo(WrappedID3D12Device *device,
   {
     ResourceId uavId = descriptor.GetResResourceId();
     ID3D12Resource *pResource = rm->GetResAs<ID3D12Resource>(uavId);
-    D3D12_RESOURCE_DESC resDesc = {};
-    if(pResource)
-      resDesc = pResource->GetDesc();
+    D3D12_RESOURCE_DESC resDesc = pResource->GetDesc();
     D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = descriptor.GetUAV();
 
     if(uavDesc.ViewDimension == D3D12_UAV_DIMENSION_UNKNOWN)
@@ -684,36 +682,10 @@ ShaderVariable D3D12ShaderDebug::GetResourceInfo(WrappedID3D12Device *device,
       {
         if(isDXIL)
         {
-          // For a Raw Buffer SRV or UAV, the return value is the number of bytes in the view.
-          if(uavDesc.Buffer.Flags & D3D12_BUFFER_UAV_FLAG_RAW)
-            result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] =
-                result.value.u32v[3] = (uint32_t)uavDesc.Buffer.NumElements * 4;
-          else
-            result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] =
-                result.value.u32v[3] = (uint32_t)uavDesc.Buffer.NumElements;
+          result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] =
+              result.value.u32v[3] = (uint32_t)uavDesc.Buffer.NumElements;
           break;
         }
-        // DXBC does not allow resinfo on buffers:
-        // srcResource must be a t# or u# register that is not a Buffer (but it is a Texture*).
-
-        DELIBERATE_FALLTHROUGH();
-      }
-      case D3D12_UAV_DIMENSION_BUFFER_BYTE_OFFSET:
-      {
-        if(isDXIL)
-        {
-          if(uavDesc.BufferByteOffset.Flags & D3D12_BUFFER_UAV_FLAG_RAW)
-            result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] =
-                result.value.u32v[3] = uint32_t(uavDesc.BufferByteOffset.Size & 0xffffffff);
-          else
-            result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] =
-                result.value.u32v[3] = GetBufferByteOffsetNumElements(uavDesc);
-          break;
-        }
-        // DXBC does not allow resinfo on buffers:
-        // srcResource must be a t# or u# register that is not a Buffer (but it is a Texture*).
-
-        DELIBERATE_FALLTHROUGH();
       }
       case D3D12_UAV_DIMENSION_UNKNOWN:
       {
@@ -807,9 +779,7 @@ ShaderVariable D3D12ShaderDebug::GetResourceInfo(WrappedID3D12Device *device,
   {
     ResourceId srvId = descriptor.GetResResourceId();
     ID3D12Resource *pResource = rm->GetResAs<ID3D12Resource>(srvId);
-    D3D12_RESOURCE_DESC resDesc = {};
-    if(pResource)
-      resDesc = pResource->GetDesc();
+    D3D12_RESOURCE_DESC resDesc = pResource->GetDesc();
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = descriptor.GetSRV();
     if(srvDesc.ViewDimension == D3D12_SRV_DIMENSION_UNKNOWN)
       srvDesc = MakeSRVDesc(resDesc);
@@ -819,35 +789,10 @@ ShaderVariable D3D12ShaderDebug::GetResourceInfo(WrappedID3D12Device *device,
       {
         if(isDXIL)
         {
-          if(srvDesc.Buffer.Flags & D3D12_BUFFER_SRV_FLAG_RAW)
-            result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] =
-                result.value.u32v[3] = (uint32_t)srvDesc.Buffer.NumElements * 4;
-          else
-            result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] =
-                result.value.u32v[3] = (uint32_t)srvDesc.Buffer.NumElements;
+          result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] =
+              result.value.u32v[3] = (uint32_t)srvDesc.Buffer.NumElements;
           break;
         }
-        // DXBC does not allow resinfo on buffers:
-        // srcResource must be a t# or u# register that is not a Buffer (but it is a Texture*).
-
-        DELIBERATE_FALLTHROUGH();
-      }
-      case D3D12_SRV_DIMENSION_BUFFER_BYTE_OFFSET:
-      {
-        if(isDXIL)
-        {
-          if(srvDesc.BufferByteOffset.Flags & D3D12_BUFFER_SRV_FLAG_RAW)
-            result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] =
-                result.value.u32v[3] = uint32_t(srvDesc.BufferByteOffset.Size & 0xffffffff);
-          else
-            result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] =
-                result.value.u32v[3] = GetBufferByteOffsetNumElements(srvDesc);
-          break;
-        }
-        // DXBC does not allow resinfo on buffers:
-        // srcResource must be a t# or u# register that is not a Buffer (but it is a Texture*).
-
-        DELIBERATE_FALLTHROUGH();
       }
       case D3D12_SRV_DIMENSION_UNKNOWN:
       {
@@ -1004,9 +949,7 @@ ShaderVariable D3D12ShaderDebug::GetSampleInfo(WrappedID3D12Device *device,
 
     ResourceId srvId = descriptor.GetResResourceId();
     ID3D12Resource *pResource = rm->GetResAs<ID3D12Resource>(srvId);
-    D3D12_RESOURCE_DESC resDesc = {};
-    if(pResource)
-      resDesc = pResource->GetDesc();
+    D3D12_RESOURCE_DESC resDesc = pResource->GetDesc();
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = descriptor.GetSRV();
     if(srvDesc.ViewDimension == D3D12_SRV_DIMENSION_UNKNOWN)
       srvDesc = MakeSRVDesc(resDesc);
@@ -1044,9 +987,7 @@ ShaderVariable D3D12ShaderDebug::GetRenderTargetSampleInfo(WrappedID3D12Device *
       res = rs.rts[0].GetResResourceId();
 
     ID3D12Resource *pResource = rm->GetResAs<ID3D12Resource>(res);
-    D3D12_RESOURCE_DESC resDesc = {};
-    if(pResource)
-      resDesc = pResource->GetDesc();
+    D3D12_RESOURCE_DESC resDesc = pResource->GetDesc();
     result.value.u32v[0] = resDesc.SampleDesc.Count;
     result.value.u32v[1] = 0;
     result.value.u32v[2] = 0;
@@ -1063,11 +1004,7 @@ DXGI_FORMAT D3D12ShaderDebug::GetUAVResourceFormat(const D3D12_UNORDERED_ACCESS_
     return uavDesc.Format;
 
   // Typeless UAV get format from the underlying resource
-  D3D12_RESOURCE_DESC resDesc = {};
-  if(pResource)
-    resDesc = pResource->GetDesc();
-  else
-    RDCERR("Unexpected NULL resource with unknown-format descriptor");
+  D3D12_RESOURCE_DESC resDesc = pResource->GetDesc();
   return resDesc.Format;
 }
 
@@ -1284,16 +1221,6 @@ void D3D12DebugAPIWrapper::FetchSRV(const DXBCDebug::BindingSlot &slot)
 
                     m_pDevice->GetDebugManager()->GetBufferData(pResource, 0, 0, srvData.data);
                   }
-                  else if(srvDesc.ViewDimension == D3D12_SRV_DIMENSION_BUFFER_BYTE_OFFSET)
-                  {
-                    // apply the offset/size immediately by fetching only that data rather than it
-                    // being in addressing calculations. Then all we need to do is set numElements
-                    srvData.numElements = D3D12ShaderDebug::GetBufferByteOffsetNumElements(srvDesc);
-
-                    m_pDevice->GetDebugManager()->GetBufferData(
-                        pResource, srvDesc.BufferByteOffset.Offset, srvDesc.BufferByteOffset.Size,
-                        srvData.data);
-                  }
 
                   // Textures are sampled via a pixel shader, so there's no need to copy their data
                 }
@@ -1465,17 +1392,6 @@ void D3D12DebugAPIWrapper::FetchUAV(const DXBCDebug::BindingSlot &slot)
 
                     m_pDevice->GetDebugManager()->GetBufferData(pResource, 0, 0, uavData.data);
                   }
-                  else if(uavDesc.ViewDimension == D3D12_UAV_DIMENSION_BUFFER_BYTE_OFFSET)
-                  {
-                    // apply the offset/size immediately by fetching only that data rather than it
-                    // being in addressing calculations. Then all we need to do is fake numElements
-                    // so it doesn't cause clamps
-                    uavData.numElements = D3D12ShaderDebug::GetBufferByteOffsetNumElements(uavDesc);
-
-                    m_pDevice->GetDebugManager()->GetBufferData(
-                        pResource, uavDesc.BufferByteOffset.Offset, uavDesc.BufferByteOffset.Size,
-                        uavData.data);
-                  }
                   else
                   {
                     uavData.tex = true;
@@ -1589,9 +1505,7 @@ ShaderVariable D3D12DebugAPIWrapper::GetBufferInfo(DXBCBytecode::OperandType typ
      type != DXBCBytecode::TYPE_UNORDERED_ACCESS_VIEW)
   {
     ID3D12Resource *pResource = rm->GetResAs<ID3D12Resource>(descriptor.GetResResourceId());
-    D3D12_RESOURCE_DESC resDesc = {};
-    if(pResource)
-      resDesc = pResource->GetDesc();
+    D3D12_RESOURCE_DESC resDesc = pResource->GetDesc();
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = descriptor.GetSRV();
     if(srvDesc.ViewDimension == D3D12_SRV_DIMENSION_UNKNOWN)
@@ -1599,22 +1513,8 @@ ShaderVariable D3D12DebugAPIWrapper::GetBufferInfo(DXBCBytecode::OperandType typ
 
     if(srvDesc.ViewDimension == D3D12_SRV_DIMENSION_BUFFER)
     {
-      if(srvDesc.Buffer.Flags & D3D12_BUFFER_SRV_FLAG_RAW)
-        result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] = result.value.u32v[3] =
-            (uint32_t)srvDesc.Buffer.NumElements * 4;
-      else
-        result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] = result.value.u32v[3] =
-            (uint32_t)srvDesc.Buffer.NumElements;
-    }
-    else if(srvDesc.ViewDimension == D3D12_SRV_DIMENSION_BUFFER_BYTE_OFFSET)
-    {
-      if(srvDesc.BufferByteOffset.Flags & D3D12_BUFFER_SRV_FLAG_RAW)
-        result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] = result.value.u32v[3] =
-            uint32_t(srvDesc.BufferByteOffset.Size & 0xffffffff);
-      else
-
-        result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] = result.value.u32v[3] =
-            D3D12ShaderDebug::GetBufferByteOffsetNumElements(srvDesc);
+      result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] = result.value.u32v[3] =
+          (uint32_t)srvDesc.Buffer.NumElements;
     }
   }
 
@@ -1622,9 +1522,7 @@ ShaderVariable D3D12DebugAPIWrapper::GetBufferInfo(DXBCBytecode::OperandType typ
      type == DXBCBytecode::TYPE_UNORDERED_ACCESS_VIEW)
   {
     ID3D12Resource *pResource = rm->GetResAs<ID3D12Resource>(descriptor.GetResResourceId());
-    D3D12_RESOURCE_DESC resDesc = {};
-    if(pResource)
-      resDesc = pResource->GetDesc();
+    D3D12_RESOURCE_DESC resDesc = pResource->GetDesc();
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = descriptor.GetUAV();
 
@@ -1633,22 +1531,8 @@ ShaderVariable D3D12DebugAPIWrapper::GetBufferInfo(DXBCBytecode::OperandType typ
 
     if(uavDesc.ViewDimension == D3D12_UAV_DIMENSION_BUFFER)
     {
-      // For a Raw Buffer SRV or UAV, the return value is the number of bytes in the view.
-      if(uavDesc.Buffer.Flags & D3D12_BUFFER_UAV_FLAG_RAW)
-        result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] = result.value.u32v[3] =
-            (uint32_t)uavDesc.Buffer.NumElements * 4;
-      else
-        result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] = result.value.u32v[3] =
-            (uint32_t)uavDesc.Buffer.NumElements;
-    }
-    else if(uavDesc.ViewDimension == D3D12_UAV_DIMENSION_BUFFER_BYTE_OFFSET)
-    {
-      if(uavDesc.BufferByteOffset.Flags & D3D12_BUFFER_UAV_FLAG_RAW)
-        result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] = result.value.u32v[3] =
-            uint32_t(uavDesc.BufferByteOffset.Size & 0xffffffff);
-      else
-        result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] = result.value.u32v[3] =
-            D3D12ShaderDebug::GetBufferByteOffsetNumElements(uavDesc);
+      result.value.u32v[0] = result.value.u32v[1] = result.value.u32v[2] = result.value.u32v[3] =
+          (uint32_t)uavDesc.Buffer.NumElements;
     }
   }
 
@@ -2071,9 +1955,6 @@ ShaderDebugTrace *D3D12Replay::DebugVertex(uint32_t eventId, uint32_t vertid, ui
     RDCERR("Vertex shader is not debuggable");
     return new ShaderDebugTrace;
   }
-
-  if(dxbc->GetDXILByteCode())
-    vs->GetWriteableDXBC()->GetDXILByteCode()->ProcessDXIL(dxbc->GetReflection());
 
   vs->GetWriteableDXBC()->GetDisassembly(false);
 
@@ -2995,9 +2876,6 @@ ShaderDebugTrace *D3D12Replay::DebugPixel(uint32_t eventId, uint32_t x, uint32_t
     return new ShaderDebugTrace;
   }
 
-  if(dxbc->GetDXILByteCode())
-    ps->GetWriteableDXBC()->GetDXILByteCode()->ProcessDXIL(dxbc->GetReflection());
-
   ps->GetWriteableDXBC()->GetDisassembly(false);
 
   ShaderDebugTrace *ret = NULL;
@@ -3589,9 +3467,6 @@ ShaderDebugTrace *D3D12Replay::DebugThread(uint32_t eventId,
     RDCERR("Compute shader is not debuggable");
     return new ShaderDebugTrace;
   }
-
-  if(dxbc->GetDXILByteCode())
-    cs->GetWriteableDXBC()->GetDXILByteCode()->ProcessDXIL(dxbc->GetReflection());
 
   cs->GetWriteableDXBC()->GetDisassembly(false);
 

@@ -29,6 +29,7 @@
 #include <QScrollBar>
 #include <QXmlStreamWriter>
 #include "Code/Resources.h"
+#include "Widgets/ComputeDebugSelector.h"
 #include "Widgets/Extended/RDHeaderView.h"
 #include "flowlayout/FlowLayout.h"
 #include "toolwindowmanager/ToolWindowManager.h"
@@ -76,6 +77,8 @@ D3D11PipelineStateViewer::D3D11PipelineStateViewer(ICaptureContext &ctx,
     : QFrame(parent), ui(new Ui::D3D11PipelineStateViewer), m_Ctx(ctx), m_Common(common)
 {
   ui->setupUi(this);
+
+  m_ComputeDebugSelector = new ComputeDebugSelector(this);
 
   const QIcon &action = Icons::action();
   const QIcon &action_hover = Icons::action_hover();
@@ -160,10 +163,8 @@ D3D11PipelineStateViewer::D3D11PipelineStateViewer(ICaptureContext &ctx,
     b->setMinimumSizeHint(QSize(250, 0));
   }
 
-  QObject::connect(ui->computeDebugSelector, &QToolButton::clicked, &m_Common,
-                   &PipelineStateViewer::computeDebugSelector_clicked);
-  QObject::connect(ui->pixelDebugSelector, &QToolButton::clicked, &m_Common,
-                   &PipelineStateViewer::pixelDebugSelector_clicked);
+  QObject::connect(m_ComputeDebugSelector, &ComputeDebugSelector::beginDebug, this,
+                   &D3D11PipelineStateViewer::computeDebugSelector_beginDebug);
 
   for(QToolButton *b : editButtons)
     QObject::connect(b, &QToolButton::clicked, &m_Common, &PipelineStateViewer::shaderEdit_clicked);
@@ -485,6 +486,7 @@ D3D11PipelineStateViewer::D3D11PipelineStateViewer(ICaptureContext &ctx,
 D3D11PipelineStateViewer::~D3D11PipelineStateViewer()
 {
   delete ui;
+  delete m_ComputeDebugSelector;
 }
 
 void D3D11PipelineStateViewer::OnCaptureLoaded()
@@ -675,24 +677,6 @@ void D3D11PipelineStateViewer::setViewDetails(RDTreeWidgetItem *node, const D3D1
     else
       text += tr("The texture has %1 array slices, the view covers slices %2-%3.\n")
                   .arg(tex->arraysize)
-                  .arg(desc.firstSlice)
-                  .arg(desc.firstSlice + desc.numSlices - 1);
-
-    viewdetails = true;
-  }
-
-  uint32_t effectiveDepth = qMax(1U, tex->depth >> desc.firstMip);
-
-  if(effectiveDepth > 1 &&
-     ((effectiveDepth != desc.numSlices && desc.numSlices > 0) || desc.firstSlice > 0))
-  {
-    if(desc.numSlices == 1)
-      text += tr("The texture has %1 3D slices at first mip, the view covers slice %2.\n")
-                  .arg(effectiveDepth)
-                  .arg(desc.firstSlice);
-    else
-      text += tr("The texture has %1 3D slices at first mip, the view covers slices %2-%3.\n")
-                  .arg(effectiveDepth)
                   .arg(desc.firstSlice)
                   .arg(desc.firstSlice + desc.numSlices - 1);
 
@@ -1193,7 +1177,6 @@ void D3D11PipelineStateViewer::clearState()
   ui->predicateGroup->setVisible(false);
 
   ui->computeDebugSelector->setEnabled(false);
-  ui->pixelDebugSelector->setEnabled(false);
 }
 
 void D3D11PipelineStateViewer::setShaderState(const D3D11Pipe::Shader &stage, RDLabel *shader,
@@ -1979,26 +1962,18 @@ void D3D11PipelineStateViewer::setState()
   ui->blends->beginUpdate();
   ui->blends->clear();
   {
-    bool independent = state.outputMerger.blendState.independentBlend;
     int i = 0;
     for(const ColorBlend &blend : state.outputMerger.blendState.blends)
     {
-      bool filledSlot = true;
+      bool filledSlot = (blend.enabled || targets[i]);
       bool usedSlot = (targets[i]);
-
-      if(!independent)
-        usedSlot = i == 0;
 
       if(showNode(usedSlot, filledSlot))
       {
         RDTreeWidgetItem *node = NULL;
 
-        QString slotName = QString::number(i);
-        if(!independent)
-          slotName = i == 0 ? tr("All") : lit("-");
-
         node = new RDTreeWidgetItem(
-            {slotName, blend.enabled ? tr("True") : tr("False"),
+            {i, blend.enabled ? tr("True") : tr("False"),
 
              ToQStr(blend.colorBlend.source), ToQStr(blend.colorBlend.destination),
              ToQStr(blend.colorBlend.operation),
@@ -2013,6 +1988,9 @@ void D3D11PipelineStateViewer::setState()
                  .arg((blend.writeMask & 0x2) == 0 ? lit("_") : lit("G"))
                  .arg((blend.writeMask & 0x4) == 0 ? lit("_") : lit("B"))
                  .arg((blend.writeMask & 0x8) == 0 ? lit("_") : lit("A"))});
+
+        if(!filledSlot)
+          setEmptyRow(node);
 
         if(!usedSlot)
           setInactiveRow(node);
@@ -2098,7 +2076,56 @@ void D3D11PipelineStateViewer::setState()
   ui->stencils->clearSelection();
   ui->stencils->endUpdate();
 
-  m_Common.SetupDebugSelectors(ui->computeDebugSelector, ui->pixelDebugSelector);
+  // set up thread debugging inputs
+  bool enableDebug = m_Ctx.APIProps().shaderDebugging && state.computeShader.reflection &&
+                     state.computeShader.reflection->debugInfo.debuggable && action &&
+                     (action->flags & ActionFlags::Dispatch);
+  if(enableDebug)
+  {
+    // Validate dispatch/threadgroup dimensions
+    enableDebug &= action->dispatchDimension[0] > 0;
+    enableDebug &= action->dispatchDimension[1] > 0;
+    enableDebug &= action->dispatchDimension[2] > 0;
+
+    const rdcfixedarray<uint32_t, 3> &threadDims =
+        (action->dispatchThreadsDimension[0] == 0)
+            ? state.computeShader.reflection->dispatchThreadsDimension
+            : action->dispatchThreadsDimension;
+    enableDebug &= threadDims[0] > 0;
+    enableDebug &= threadDims[1] > 0;
+    enableDebug &= threadDims[2] > 0;
+  }
+
+  if(enableDebug)
+  {
+    ui->computeDebugSelector->setEnabled(true);
+
+    // set maximums for CS debugging
+    m_ComputeDebugSelector->SetThreadBounds(
+        action->dispatchDimension, (action->dispatchThreadsDimension[0] == 0)
+                                       ? state.computeShader.reflection->dispatchThreadsDimension
+                                       : action->dispatchThreadsDimension);
+
+    ui->computeDebugSelector->setToolTip(
+        tr("Debug this compute shader by specifying group/thread ID or dispatch ID"));
+  }
+  else
+  {
+    ui->computeDebugSelector->setEnabled(false);
+
+    if(!m_Ctx.APIProps().shaderDebugging)
+      ui->computeDebugSelector->setToolTip(tr("This API does not support shader debugging"));
+    else if(!action || !(action->flags & ActionFlags::Dispatch))
+      ui->computeDebugSelector->setToolTip(tr("No dispatch selected"));
+    else if(!state.computeShader.reflection)
+      ui->computeDebugSelector->setToolTip(tr("No compute shader bound"));
+    else if(!state.computeShader.reflection->debugInfo.debuggable)
+      ui->computeDebugSelector->setToolTip(
+          tr("This shader doesn't support debugging: %1")
+              .arg(state.computeShader.reflection->debugInfo.debugStatus));
+    else
+      ui->computeDebugSelector->setToolTip(tr("Invalid dispatch/threadgroup dimensions."));
+  }
 
   // highlight the appropriate stages in the flowchart
   if(action == NULL)
@@ -2273,7 +2300,7 @@ void D3D11PipelineStateViewer::resource_itemActivated(RDTreeWidgetItem *item, in
 
     if(shaderRes)
     {
-      format = BufferFormatter::GetBufferFormatString(PackingRules::D3DUAV(), stage->resourceId,
+      format = BufferFormatter::GetBufferFormatString(Packing::D3DUAV, stage->resourceId,
                                                       *shaderRes, view.desc.format);
 
       if(view.desc.flags & DescriptorFlags::RawBuffer)
@@ -3126,7 +3153,6 @@ void D3D11PipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const D3D11Pipe
 
     QList<QVariantList> rows;
 
-    bool independent = om.blendState.independentBlend;
     int i = 0;
     for(const ColorBlend &b : om.blendState.blends)
     {
@@ -3139,11 +3165,7 @@ void D3D11PipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const D3D11Pipe
                          .arg((b.writeMask & 0x4) == 0 ? lit("_") : lit("B"))
                          .arg((b.writeMask & 0x8) == 0 ? lit("_") : lit("A"));
 
-      QString slotName = QString::number(i);
-      if(!independent)
-        slotName = i == 0 ? tr("All") : lit("-");
-
-      rows.push_back({slotName, b.enabled ? tr("Yes") : tr("No"),
+      rows.push_back({i, b.enabled ? tr("Yes") : tr("No"),
                       b.logicOperationEnabled ? tr("Yes") : tr("No"), ToQStr(b.colorBlend.source),
                       ToQStr(b.colorBlend.destination), ToQStr(b.colorBlend.operation),
                       ToQStr(b.alphaBlend.source), ToQStr(b.alphaBlend.destination),
@@ -3386,4 +3408,94 @@ void D3D11PipelineStateViewer::on_meshView_clicked()
   if(!m_Ctx.HasMeshPreview())
     m_Ctx.ShowMeshPreview();
   ToolWindowManager::raiseToolWindow(m_Ctx.GetMeshPreview()->Widget());
+}
+
+void D3D11PipelineStateViewer::on_computeDebugSelector_clicked()
+{
+  // Check whether debugging is valid for this event before showing the dialog
+  if(!m_Ctx.IsCaptureLoaded())
+    return;
+
+  const ActionDescription *action = m_Ctx.CurAction();
+
+  if(!action)
+    return;
+
+  const ShaderReflection *shaderDetails =
+      m_Ctx.CurPipelineState().GetShaderReflection(ShaderStage::Compute);
+
+  if(!shaderDetails)
+    return;
+
+  RDDialog::show(m_ComputeDebugSelector);
+}
+
+void D3D11PipelineStateViewer::computeDebugSelector_beginDebug(
+    const rdcfixedarray<uint32_t, 3> &group, const rdcfixedarray<uint32_t, 3> &thread)
+{
+  const ActionDescription *action = m_Ctx.CurAction();
+
+  if(!action)
+    return;
+
+  const ShaderReflection *shaderDetails =
+      m_Ctx.CurPipelineState().GetShaderReflection(ShaderStage::Compute);
+
+  if(!shaderDetails)
+    return;
+
+  struct threadSelect
+  {
+    rdcfixedarray<uint32_t, 3> g;
+    rdcfixedarray<uint32_t, 3> t;
+  } debugThread = {
+      // g[]
+      {group[0], group[1], group[2]},
+      // t[]
+      {thread[0], thread[1], thread[2]},
+  };
+
+  bool done = false;
+  ShaderDebugTrace *trace = NULL;
+
+  m_Ctx.Replay().AsyncInvoke([&trace, &done, debugThread](IReplayController *r) {
+    trace = r->DebugThread(debugThread.g, debugThread.t);
+
+    if(trace->debugger == NULL)
+    {
+      r->FreeTrace(trace);
+      trace = NULL;
+    }
+
+    done = true;
+  });
+
+  QString debugContext = lit("Group [%1,%2,%3] Thread [%4,%5,%6]")
+                             .arg(group[0])
+                             .arg(group[1])
+                             .arg(group[2])
+                             .arg(thread[0])
+                             .arg(thread[1])
+                             .arg(thread[2]);
+
+  // wait a short while before displaying the progress dialog (which won't show if we're already
+  // done by the time we reach it)
+  for(int i = 0; !done && i < 100; i++)
+    QThread::msleep(5);
+
+  ShowProgressDialog(this, tr("Debugging %1").arg(debugContext), [&done]() { return done; });
+
+  if(!trace)
+  {
+    RDDialog::critical(
+        this, tr("Error debugging"),
+        tr("Error debugging thread - make sure a valid group and thread is selected"));
+    return;
+  }
+
+  // viewer takes ownership of the trace
+  IShaderViewer *s = m_Ctx.DebugShader(
+      shaderDetails, m_Ctx.CurPipelineState().GetComputePipelineObject(), trace, debugContext);
+
+  m_Ctx.AddDockWindow(s->Widget(), DockReference::AddTo, this);
 }

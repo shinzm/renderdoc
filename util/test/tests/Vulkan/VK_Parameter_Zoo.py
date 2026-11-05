@@ -1,5 +1,3 @@
-from typing import Dict
-
 import renderdoc as rd
 import rdtest
 
@@ -8,19 +6,15 @@ class VK_Parameter_Zoo(rdtest.TestCase):
     demos_test_name = 'VK_Parameter_Zoo'
 
     def check_capture(self):
-        assert self.controller is not None
-        if not self.validate_eventids(self.controller):
-            raise rdtest.TestFailureException("Event IDs are not valid")
-
         action = self.find_action("Color Draw")
 
-        assert action is not None
+        self.check(action is not None)
 
-        action = action.nextAction
+        action = action.next
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         self.check_pixel_value(pipe.GetOutputTargets()[0].resource, 0.5, 0.5, [0.0, 1.0, 0.0, 1.0])
 
@@ -30,14 +24,15 @@ class VK_Parameter_Zoo(rdtest.TestCase):
 
         # Find the action that contains resource references
         action = self.find_action("References")
-        assert action is not None
-        action = action.nextAction
-        self.set_event(action.eventId, False)
+        self.check(action is not None)
+        action = action.next
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        vkpipe = self.controller.GetVulkanPipelineState()
+        vkpipe: rd.VKState = self.controller.GetVulkanPipelineState()
 
-        res_names: Dict[rd.ResourceId, str] = {}
+        res_names = {}
         for res in self.controller.GetResources():
+            res: rd.ResourceDescription
             res_names[res.resourceId] = res.name
 
         expected_binds = [
@@ -76,13 +71,15 @@ class VK_Parameter_Zoo(rdtest.TestCase):
 
         setidx = 0
         for descset in vkpipe.graphics.descriptorSets:
+            descset: rd.VKDescriptorSet
+
             if setidx == 2 and not descset.pushDescriptor:
-                raise rdtest.TestFailureException(f"Expected set {setidx} to be a push set")
+                raise rdtest.TestFailureException("Expected set {} to be a push set", setidx)
 
             if setidx != 2 and descset.pushDescriptor:
-                raise rdtest.TestFailureException(f"Expected set {setidx} to be a non-push set")
+                raise rdtest.TestFailureException("Expected set {} to be a non-push set", setidx)
 
-            range = rd.DescriptorRange()
+            range: rd.DescriptorRange = rd.DescriptorRange()
             range.offset = 0
             # push descriptors don't include dynamic descriptors so don't fetch those
             range.count = len([
@@ -103,31 +100,33 @@ class VK_Parameter_Zoo(rdtest.TestCase):
 
                 if not sampname == expected_samp:
                     raise rdtest.TestFailureException(
-                        f"Expected binding {bindidx} in set {setidx} to have sampler {expected_samp} but got {sampname}")
+                        "Expected binding {} in set {} to have sampler {} but got {}".format(
+                            bindidx, setidx, expected_samp, sampname))
 
                 if not resname == expected_res:
                     raise rdtest.TestFailureException(
-                        f"Expected binding {bindidx} in set {setidx} to have resource {expected_res} but got {resname}")
+                        "Expected binding {} in set {} to have resource {} but got {}".format(
+                            bindidx, setidx, expected_res, resname))
 
-            rdtest.log.success(f"Resources in set {setidx} were found as expected")
+            rdtest.log.success("Resources in set {} were found as expected".format(setidx))
 
             setidx = setidx + 1
 
         # Since we can only have one push descriptor set we have a second action for push AND template updates
         if descriptor_update_template and push_descriptor:
             action = self.find_action("PushTemplReferences")
-            assert action is not None
-            action = action.nextAction
-            self.set_event(action.eventId, False)
+            self.check(action is not None)
+            action = action.next
+            self.controller.SetFrameEvent(action.eventId, False)
 
-            vkpipe = self.controller.GetVulkanPipelineState()
+            vkpipe: rd.VKState = self.controller.GetVulkanPipelineState()
 
-            descset = vkpipe.graphics.descriptorSets[2]
+            descset: rd.VKDescriptorSet = vkpipe.graphics.descriptorSets[2]
 
             if not descset.pushDescriptor:
                 raise rdtest.TestFailureException("Expected set 2 to be a push set")
 
-            range = rd.DescriptorRange()
+            range: rd.DescriptorRange = rd.DescriptorRange()
             range.offset = 0
             # push descriptors don't include dynamic descriptors so don't fetch those
             range.count = len([
@@ -148,11 +147,13 @@ class VK_Parameter_Zoo(rdtest.TestCase):
 
                 if not sampname == expected_samp:
                     raise rdtest.TestFailureException(
-                        f"Expected binding {bindidx} in set {setidx} to have sampler {expected_samp} but got {sampname}")
+                        "Expected binding {} in set {} to have sampler {} but got {}".format(
+                            bindidx, setidx, expected_samp, sampname))
 
                 if not resname == expected_res:
                     raise rdtest.TestFailureException(
-                        f"Expected binding {bindidx} in set {setidx} to have resource {expected_res} but got {resname}")
+                        "Expected binding {} in set {} to have resource {} but got {}".format(
+                            bindidx, setidx, expected_res, resname))
 
             rdtest.log.success("Resources in push template set were found as expected")
 
@@ -160,19 +161,19 @@ class VK_Parameter_Zoo(rdtest.TestCase):
 
         action = self.find_action("Tools available")
 
-        assert len(action.children) > 1
-        assert any([d.customName == 'RenderDoc' for d in action.children])
+        self.check(len(action.children) > 1)
+        self.check(any([d.customName == 'RenderDoc' for d in action.children]))
 
         rdtest.log.success("RenderDoc tool was listed as available")
 
         for variant in [1, 2]:
             action = self.find_action(f"ASM Draw {variant}")
-            assert action is not None
 
-            action = action.nextAction
-            assert action is not None
+            self.check(action is not None)
 
-            self.set_event(action.eventId, False)
+            action = action.next
+
+            self.controller.SetFrameEvent(action.eventId, False)
 
             pipe = self.controller.GetPipelineState()
 
@@ -183,14 +184,14 @@ class VK_Parameter_Zoo(rdtest.TestCase):
 
             if not (rd.DescriptorType.Image, 0, 1) in [(a.type, a.index, a.arrayElement) for a in access]:
                 raise rdtest.TestFailureException(
-                    f"Graphics bind 0[1] isn't the accessed descriptor {rd.DumpObject(access)!s}")
+                    f"Graphics bind 0[1] isn't the accessed descriptor {str(rd.DumpObject(access))}")
 
-            vkpipe = self.controller.GetVulkanPipelineState()
-            assert len(vkpipe.viewportScissor.viewportScissors) == 0
+            vkpipe: rd.VKState = self.controller.GetVulkanPipelineState()
+            self.check(len(vkpipe.viewportScissor.viewportScissors) == 0)
 
             postvs_data = self.get_postvs(action, rd.MeshDataStage.VSOut, 0, action.numIndices)
 
-            postvs_ref: rdtest.MeshReference = {
+            postvs_ref = {
                 0: {
                     'vtx': 0,
                     'idx': 0,
@@ -230,7 +231,7 @@ class VK_Parameter_Zoo(rdtest.TestCase):
 
             rdtest.log.print(f"Checking {action.customName}")
 
-            self.set_event(action.nextAction.eventId, False)
+            self.controller.SetFrameEvent(action.next.eventId, False)
 
             self.check_triangle(fore=[1.0, 0.0, 1.0, 1.0])
 
@@ -269,11 +270,11 @@ class VK_Parameter_Zoo(rdtest.TestCase):
 
         action = self.find_action("Immutable Draw")
 
-        assert action is not None
+        self.check(action is not None)
 
-        action = action.nextAction
+        action = action.next
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
         pipe = self.controller.GetPipelineState()
 
@@ -294,40 +295,33 @@ class VK_Parameter_Zoo(rdtest.TestCase):
 
         # Check for resource leaks
         if len(sdfile.chunks) > 500:
-            raise rdtest.TestFailureException(f"Too many chunks found: {len(sdfile.chunks)}")
+            raise rdtest.TestFailureException("Too many chunks found: {}".format(len(sdfile.chunks)))
 
         action = self.find_action("before_empty")
         action = self.get_action(action.eventId + 1)
+        self.check("vkQueueSubmit" in action.GetName(sdfile))
         a = action.GetName(sdfile)
-        # vkQueueSubmit with two submits each with zero command buffers
-        assert "vkQueueSubmit(" in action.GetName(sdfile)
-        assert "No Command Buffers" in action.GetName(sdfile)
         action = self.get_action(action.eventId + 1)
-        assert "vkQueueSubmit(" in action.GetName(sdfile)
-        assert "No Command Buffers" in action.GetName(sdfile)
-        # vkQueueSubmit with zero submits 
-        action = self.get_action(action.eventId + 1)
-        assert "vkQueueSubmit()" in action.GetName(sdfile)
-        assert "No Submit" in action.GetName(sdfile)
+        self.check("vkQueueSubmit" in action.GetName(sdfile))
+        self.check("No Command Buffers" in action.GetName(sdfile))
+        self.check(a != action.GetName(sdfile))
 
         action = self.get_action(action.eventId + 1)
         if "after_empty" not in action.GetName(sdfile):
-            # vkQueueSubmit2 with one submit with zero command buffers
-            assert "vkQueueSubmit2(" in action.GetName(sdfile)
-            assert "No Command Buffers" in action.GetName(sdfile)
-            assert a != action.GetName(sdfile)
-            # vkQueueSubmit with zero submits 
+            self.check("vkQueueSubmit2" in action.GetName(sdfile))
+            a = action.GetName(sdfile)
             action = self.get_action(action.eventId + 1)
-            assert "vkQueueSubmit2()" in action.GetName(sdfile)
-            assert "No Submit" in action.GetName(sdfile)
+            self.check("vkQueueSubmit2" in action.GetName(sdfile))
+            self.check("No Command Buffers" in action.GetName(sdfile))
+            self.check(a != action.GetName(sdfile))
 
         rdtest.log.success("Empty queue submits are as expected")
 
         action = self.find_action("Dynamic Array Draw")
 
-        action = action.nextAction
+        action = action.next
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
         self.check_triangle()
 

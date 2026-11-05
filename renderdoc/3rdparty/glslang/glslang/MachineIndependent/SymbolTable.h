@@ -69,9 +69,6 @@
 #include "../Include/intermediate.h"
 #include "../Include/InfoSink.h"
 
-#include <functional>
-#include <unordered_map>
-
 namespace glslang {
 
 //
@@ -235,13 +232,6 @@ struct TParameter {
             name = nullptr;
         type = param.type->clone();
         defaultValue = param.defaultValue;
-        if (defaultValue) {
-            // The defaultValue of a builtin is created in a TPoolAllocator that no longer exists
-            // when parsing the user program, so make a deep copy.
-            if (const auto *constUnion = defaultValue->getAsConstantUnion()) {
-                defaultValue = new TIntermConstantUnion(*constUnion->getConstArray().clone(), constUnion->getType());
-            }
-        }
         return *this;
     }
     TBuiltInVariable getDeclaredBuiltIn() const { return type->getQualifier().declaredBuiltIn; }
@@ -255,12 +245,12 @@ public:
     explicit TFunction(TOperator o) :
         TSymbol(nullptr),
         op(o),
-        defined(false), prototyped(false), implicitThis(false), illegalImplicitThis(false), variadic(false), defaultParamCount(0) { }
+        defined(false), prototyped(false), implicitThis(false), illegalImplicitThis(false), defaultParamCount(0) { }
     TFunction(const TString *name, const TType& retType, TOperator tOp = EOpNull) :
         TSymbol(name),
         mangledName(*name + '('),
         op(tOp),
-        defined(false), prototyped(false), implicitThis(false), illegalImplicitThis(false), variadic(false), defaultParamCount(0),
+        defined(false), prototyped(false), implicitThis(false), illegalImplicitThis(false), defaultParamCount(0),
         linkType(ELinkNone)
     {
         returnType.shallowCopy(retType);
@@ -278,7 +268,6 @@ public:
     virtual void addParameter(TParameter& p)
     {
         assert(writable);
-        assert(!variadic && "cannot add more parameters if function is marked variadic");
         parameters.push_back(p);
         p.type->appendMangledName(mangledName);
 
@@ -321,13 +310,6 @@ public:
     virtual bool hasImplicitThis() const { return implicitThis; }
     virtual void setIllegalImplicitThis() { assert(writable); illegalImplicitThis = true; }
     virtual bool hasIllegalImplicitThis() const { return illegalImplicitThis; }
-    virtual void setVariadic() {
-        assert(writable);
-        assert(!variadic && "function was already marked variadic");
-        variadic = true;
-        mangledName += 'z';
-    }
-    virtual bool isVariadic() const { return variadic; }
 
     // Return total number of parameters
     virtual int getParamCount() const { return static_cast<int>(parameters.size()); }
@@ -370,7 +352,6 @@ protected:
                                // even if it finds member variables in the symbol table.
                                // This is important for a static member function that has member variables in scope,
                                // but is not allowed to use them, or see hidden symbols instead.
-    bool variadic;
     int  defaultParamCount;
 
     TSpirvInstruction spirvInst; // SPIR-V instruction qualifiers
@@ -506,12 +487,6 @@ public:
         retargetedSymbols.push_back({from, to});
     }
 
-    void collectRetargetedSymbols(std::unordered_multimap<std::string, std::string> &out) const {
-        // RD modification - use normal pair access, use explicit constructor
-        for (const auto &sym : retargetedSymbols)
-            out.insert({std::string(sym.second.data(), sym.second.size()), std::string(sym.first.data(), sym.first.size())});
-    }
-
     TSymbol* find(const TString& name) const
     {
         tLevel::const_iterator it = level.find(name);
@@ -605,7 +580,6 @@ public:
 
     void relateToOperator(const char* name, TOperator op);
     void setFunctionExtensions(const char* name, int num, const char* const extensions[]);
-    void setFunctionExtensionsCallback(const char* name, std::function<std::vector<const char *>(const char *)> const &func);
     void setSingleFunctionExtensions(const char* name, int num, const char* const extensions[]);
     void dump(TInfoSink& infoSink, bool complete = false) const;
     TSymbolTableLevel* clone() const;
@@ -669,10 +643,9 @@ public:
     //
 protected:
     static const uint32_t LevelFlagBitOffset = 56;
-    static constexpr int builtinLevel = 2;
-    static constexpr int globalLevel = 3;
+    static const int globalLevel = 3;
     static bool isSharedLevel(int level)  { return level <= 1; }            // exclude all per-compile levels
-    static bool isBuiltInLevel(int level) { return level <= builtinLevel; } // exclude user globals
+    static bool isBuiltInLevel(int level) { return level <= 2; }            // exclude user globals
     static bool isGlobalLevel(int level)  { return level <= globalLevel; }  // include user globals
 public:
     bool isEmpty() { return table.size() == 0; }
@@ -837,15 +810,6 @@ public:
         table[level]->retargetSymbol(from, to);
     }
 
-    std::unordered_multimap<std::string, std::string> collectBuiltinAlias() {
-        std::unordered_multimap<std::string, std::string> allRetargets;
-        // RD modification - some compilers get confused with this and expect an instantiation of the static const int
-        const int x = builtinLevel;
-        for (int level = 0; level <= std::min(currentLevel(), x); ++level)
-            table[level]->collectRetargetedSymbols(allRetargets);
-
-        return allRetargets;
-    }
 
     // Find of a symbol that returns how many layers deep of nested
     // structures-with-member-functions ('this' scopes) deep the symbol was
@@ -916,12 +880,6 @@ public:
     {
         for (unsigned int level = 0; level < table.size(); ++level)
             table[level]->setFunctionExtensions(name, num, extensions);
-    }
-
-    void setFunctionExtensionsCallback(const char* name, std::function<std::vector<const char *>(const char *)> const &func)
-    {
-        for (unsigned int level = 0; level < table.size(); ++level)
-            table[level]->setFunctionExtensionsCallback(name, func);
     }
 
     void setSingleFunctionExtensions(const char* name, int num, const char* const extensions[])

@@ -1,3 +1,4 @@
+import renderdoc as rd
 import rdtest
 
 
@@ -12,10 +13,10 @@ class D3D11_Swapchain_Zoo(rdtest.TestCase):
         action = self.find_action("DrawIndexed")
 
         while action is not None:
-            self.set_event(action.eventId, False)
+            self.controller.SetFrameEvent(action.eventId, False)
 
             self.check_triangle(back=[0.0, 0.0, 0.0, 1.0])
 
-            rdtest.log.success(f"OK at {action.previousAction.customName}")
+            rdtest.log.success("OK at {}".format(action.previous.customName))
 
             action = self.find_action("DrawIndexed", action.eventId+1)

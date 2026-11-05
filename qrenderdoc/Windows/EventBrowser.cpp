@@ -162,7 +162,7 @@ struct EventBrowserPersistentStorage : public CustomPersistentStorage
   QList<QPair<QString, QString>> SavedFilters;
 };
 
-static EventBrowserPersistentStorage persistentStorage("EventBrowser");
+static EventBrowserPersistentStorage persistantStorage("EventBrowser");
 
 enum
 {
@@ -225,7 +225,7 @@ struct EventItemModel : public QAbstractItemModel
                          .arg(paramcol.blue(), 2, 16, QLatin1Char('0'));
   }
 
-  void ResetModel(bool closing)
+  void ResetModel()
   {
     emit beginResetModel();
     emit endResetModel();
@@ -238,7 +238,7 @@ struct EventItemModel : public QAbstractItemModel
     m_Chunks.clear();
     m_Times.clear();
 
-    if(!closing && !m_Ctx.CurRootActions().empty())
+    if(!m_Ctx.CurRootActions().empty())
       m_Nodes[0] = CreateActionNode(NULL);
 
     m_CurrentEID = createIndex(0, 0, TagCaptureStart);
@@ -250,8 +250,7 @@ struct EventItemModel : public QAbstractItemModel
     m_FindString.clear();
     m_FindEIDSearch = false;
 
-    if(!closing)
-      RefreshCache();
+    RefreshCache();
   }
 
   void RefreshCache()
@@ -1556,7 +1555,7 @@ public:
     rdcarray<rdcstr> ret;
 
     if(cb)
-      ret = cb(&m_Ctx, filter, params);
+      ret = m_BuiltinFilters[filter].completer(&m_Ctx, filter, params);
 
     QStringList qret;
     for(const rdcstr &s : ret)
@@ -3841,7 +3840,6 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
   ui->bookmarkStrip->hide();
 
   m_BookmarkStripLayout = new FlowLayout(ui->bookmarkStrip, 0, 3, 3);
-  m_BookmarkStripLayout->setContentsMargins(6, 0, 6, 2);
   m_BookmarkSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
 
   ui->bookmarkStrip->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
@@ -3850,9 +3848,9 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
 
   {
     QHBoxLayout *box = new QHBoxLayout(ui->breadcrumbStrip);
+    box->setContentsMargins(QMargins(0, 0, 0, 0));
     box->setMargin(0);
     box->setSpacing(0);
-    box->setContentsMargins(QMargins(0, 0, 6, 2));
     m_Breadcrumbs = new MarkerBreadcrumbs(m_Ctx, this, this);
     box->addWidget(m_Breadcrumbs);
 
@@ -3940,7 +3938,7 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
   ui->filterExpression->enableCompletion();
   ui->filterExpression->setAcceptRichText(false);
 
-  ui->filterExpression->setText(persistentStorage.CurrentFilter);
+  ui->filterExpression->setText(persistantStorage.CurrentFilter);
 
   m_SavedCompleter = new QCompleter(this);
   m_SavedCompleter->setWidget(ui->filterExpression);
@@ -3953,9 +3951,9 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
   QObject::connect(m_SavedCompleter, OverloadedSlot<const QModelIndex &>::of(&QCompleter::activated),
                    [this](const QModelIndex &idx) {
                      int i = idx.row();
-                     if(i >= 0 && i < persistentStorage.SavedFilters.count())
+                     if(i >= 0 && i < persistantStorage.SavedFilters.count())
                      {
-                       m_CurrentFilterText->setPlainText(persistentStorage.SavedFilters[i].second);
+                       m_CurrentFilterText->setPlainText(persistantStorage.SavedFilters[i].second);
 
                        QTextCursor c = m_CurrentFilterText->textCursor();
                        c.movePosition(QTextCursor::EndOfLine);
@@ -4060,7 +4058,7 @@ void EventBrowser::OnCaptureLoaded()
   // older Qt versions lose all the sections when a model resets even if the sections don't change.
   // Manually save/restore them
   QVariant p = persistData();
-  m_Model->ResetModel(false);
+  m_Model->ResetModel();
   setPersistData(p);
 
   // expand the root frame node
@@ -4086,8 +4084,6 @@ void EventBrowser::OnCaptureLoaded()
   ui->exportActions->setEnabled(true);
   ui->stepPrev->setEnabled(true);
   ui->stepNext->setEnabled(true);
-
-  updateStepNextPrevButtonState();
 }
 
 void EventBrowser::OnCaptureClosed()
@@ -4105,7 +4101,7 @@ void EventBrowser::OnCaptureClosed()
   // older Qt versions lose all the sections when a model resets even if the sections don't change.
   // Manually save/restore them
   QVariant p = persistData();
-  m_Model->ResetModel(true);
+  m_Model->ResetModel();
   setPersistData(p);
 
   ui->find->setEnabled(false);
@@ -4178,7 +4174,21 @@ void EventBrowser::events_currentChanged(const QModelIndex &current, const QMode
   m_Model->RefreshCache();
   m_Breadcrumbs->OnEventChanged(effectiveEID);
 
-  updateStepNextPrevButtonState();
+  const ActionDescription *action = m_Ctx.GetAction(selectedEID);
+
+  if(action && action->IsFakeMarker())
+    action = &action->children.back();
+
+  ui->stepPrev->setEnabled(action && action->previous);
+  ui->stepNext->setEnabled(action && action->next);
+
+  // special case for the first action in the frame
+  if(selectedEID == 0)
+    ui->stepNext->setEnabled(true);
+
+  // special case for the first 'virtual' action at EID 0
+  if(m_Ctx.GetFirstAction() && selectedEID == m_Ctx.GetFirstAction()->eventId)
+    ui->stepPrev->setEnabled(true);
 
   highlightBookmarks();
 }
@@ -4355,7 +4365,7 @@ void EventBrowser::CreateFilterDialog()
     saveName.setPlaceholderText(tr("Name of filter"));
 
     RDListWidget filters;
-    for(const QPair<QString, QString> &f : persistentStorage.SavedFilters)
+    for(const QPair<QString, QString> &f : persistantStorage.SavedFilters)
       filters.addItem(f.first);
 
     QPushButton saveButton;
@@ -4397,9 +4407,9 @@ void EventBrowser::CreateFilterDialog()
                      [&saveButton](QListWidgetItem *) { saveButton.click(); });
 
     QObject::connect(&saveName, &RDLineEdit::textChanged, [&saveName, &filters]() {
-      for(int i = 0; i < persistentStorage.SavedFilters.count(); i++)
+      for(int i = 0; i < persistantStorage.SavedFilters.count(); i++)
       {
-        if(saveName.text().trimmed().toLower() == persistentStorage.SavedFilters[i].first.toLower())
+        if(saveName.text().trimmed().toLower() == persistantStorage.SavedFilters[i].first.toLower())
         {
           if(filters.currentRow() != i)
             filters.setCurrentRow(i);
@@ -4411,19 +4421,19 @@ void EventBrowser::CreateFilterDialog()
     });
 
     QObject::connect(&filters, &QListWidget::currentRowChanged, [&saveName](int row) {
-      if(row >= 0 && row < persistentStorage.SavedFilters.count())
-        saveName.setText(persistentStorage.SavedFilters[row].first);
+      if(row >= 0 && row < persistantStorage.SavedFilters.count())
+        saveName.setText(persistantStorage.SavedFilters[row].first);
     });
 
     QObject::connect(&saveButton, &QPushButton::clicked, [this, dialog, &saveName, &filters]() {
       QString n = saveName.text().trimmed();
       QString f = m_FilterSettings.Filter->toPlainText();
 
-      for(int i = 0; i < persistentStorage.SavedFilters.count(); i++)
+      for(int i = 0; i < persistantStorage.SavedFilters.count(); i++)
       {
-        if(n.toLower() == persistentStorage.SavedFilters[i].first.toLower())
+        if(n.toLower() == persistantStorage.SavedFilters[i].first.toLower())
         {
-          if(persistentStorage.SavedFilters[i].second.trimmed() == f.trimmed())
+          if(persistantStorage.SavedFilters[i].second.trimmed() == f.trimmed())
           {
             dialog->accept();
             return;
@@ -4432,8 +4442,8 @@ void EventBrowser::CreateFilterDialog()
           QMessageBox::StandardButton res = RDDialog::question(
               dialog, tr("Delete filter?"),
               tr("Are you sure you want to overwrite the %1 filter? From:\n\n%2\n\nTo:\n\n%3")
-                  .arg(persistentStorage.SavedFilters[i].first)
-                  .arg(persistentStorage.SavedFilters[i].second)
+                  .arg(persistantStorage.SavedFilters[i].first)
+                  .arg(persistantStorage.SavedFilters[i].second)
                   .arg(f),
               QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
 
@@ -4441,12 +4451,12 @@ void EventBrowser::CreateFilterDialog()
             return;
 
           delete filters.takeItem(i);
-          persistentStorage.SavedFilters.erase(persistentStorage.SavedFilters.begin() + i);
+          persistantStorage.SavedFilters.erase(persistantStorage.SavedFilters.begin() + i);
           break;
         }
       }
 
-      persistentStorage.SavedFilters.insert(0, {n, f});
+      persistantStorage.SavedFilters.insert(0, {n, f});
 
       dialog->accept();
     });
@@ -4456,21 +4466,21 @@ void EventBrowser::CreateFilterDialog()
       if(!item)
         return;
 
-      for(int i = 0; i < persistentStorage.SavedFilters.count(); i++)
+      for(int i = 0; i < persistantStorage.SavedFilters.count(); i++)
       {
-        if(item->text().trimmed().toLower() == persistentStorage.SavedFilters[i].first.toLower())
+        if(item->text().trimmed().toLower() == persistantStorage.SavedFilters[i].first.toLower())
         {
           QMessageBox::StandardButton res =
               RDDialog::question(dialog, tr("Delete filter?"),
                                  tr("Are you sure you want to delete the %1 filter?\n\n%2")
-                                     .arg(persistentStorage.SavedFilters[i].first)
-                                     .arg(persistentStorage.SavedFilters[i].second),
+                                     .arg(persistantStorage.SavedFilters[i].first)
+                                     .arg(persistantStorage.SavedFilters[i].second),
                                  QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
 
           if(res == QMessageBox::Yes)
           {
             delete filters.takeItem(i);
-            persistentStorage.SavedFilters.erase(persistentStorage.SavedFilters.begin() + i);
+            persistantStorage.SavedFilters.erase(persistantStorage.SavedFilters.begin() + i);
           }
 
           return;
@@ -4525,7 +4535,7 @@ void EventBrowser::CreateFilterDialog()
 
           if(res == QMessageBox::Yes)
           {
-            persistentStorage.SavedFilters = storedFilters.SavedFilters;
+            persistantStorage.SavedFilters = storedFilters.SavedFilters;
           }
         }
         else
@@ -4555,7 +4565,7 @@ void EventBrowser::CreateFilterDialog()
       if(f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
       {
         QVariant v;
-        persistentStorage.save(v);
+        persistantStorage.save(v);
 
         QVariantMap filters = v.toMap();
         SaveToJSON(filters, f, "rdocFilterSet", 1);
@@ -4573,7 +4583,7 @@ void EventBrowser::CreateFilterDialog()
 
   // disable export if there are no filters to export
   QObject::connect(importExportMenu, &QMenu::aboutToShow, [exportAction]() {
-    exportAction->setEnabled(!persistentStorage.SavedFilters.isEmpty());
+    exportAction->setEnabled(!persistantStorage.SavedFilters.isEmpty());
   });
 
   saveFilter->setMenu(importExportMenu);
@@ -4982,7 +4992,7 @@ void EventBrowser::filter_apply()
   ui->events->updateExpansion(m_EventsExpansion, keygen);
 
   QString expression = ui->filterExpression->toPlainText();
-  persistentStorage.CurrentFilter = expression;
+  persistantStorage.CurrentFilter = expression;
 
   rdcarray<EventFilter> filters;
   *m_ParseTrace = m_FilterModel->ParseExpressionToFilters(expression, filters);
@@ -5214,7 +5224,7 @@ void EventBrowser::ShowSavedFilterCompleter(RDTextEdit *filter)
 {
   QStringList strs;
 
-  for(QPair<QString, QString> &f : persistentStorage.SavedFilters)
+  for(QPair<QString, QString> &f : persistantStorage.SavedFilters)
     strs << f.first + lit(": ") + f.second;
 
   m_SavedCompletionModel->setStringList(strs);
@@ -5332,34 +5342,13 @@ void EventBrowser::on_stepNext_clicked()
   if(!m_Ctx.IsCaptureLoaded() || !ui->stepNext->isEnabled())
     return;
 
-  const ActionDescription *action = NULL;
-  uint32_t selectedEID = 0;
-  QModelIndex idx = ui->events->currentIndex();
-  if(idx.isValid())
-  {
-    selectedEID = GetSelectedEID(idx);
-    action = m_Ctx.GetAction(selectedEID);
-  }
-  else
-  {
-    // No selected action use the current action
-    if(!action)
-      action = m_Ctx.CurAction();
-  }
+  const ActionDescription *action = m_Ctx.CurAction();
+
+  if(action)
+    action = action->next;
 
   // special case for the first 'virtual' action at EID 0
   if(m_Ctx.CurEvent() == 0)
-    action = m_Ctx.GetFirstAction();
-
-  if(action)
-  {
-    if(!action->children.empty())
-      action = &action->children[0];
-    else if(action->nextAction)
-      action = action->nextAction;
-  }
-
-  if(selectedEID == 0)
     action = m_Ctx.GetFirstAction();
 
   while(action)
@@ -5370,7 +5359,7 @@ void EventBrowser::on_stepNext_clicked()
 
     // if it failed, possibly the next action is filtered out. Step along the list until we find one
     // which isn't
-    action = action->nextAction;
+    action = action->next;
   }
 }
 
@@ -5379,25 +5368,10 @@ void EventBrowser::on_stepPrev_clicked()
   if(!m_Ctx.IsCaptureLoaded() || !ui->stepPrev->isEnabled())
     return;
 
-  const ActionDescription *action = NULL;
-  QModelIndex idx = ui->events->currentIndex();
-  if(idx.isValid())
-  {
-    uint32_t selectedEID = GetSelectedEID(idx);
-    action = m_Ctx.GetAction(selectedEID);
-  }
-
-  // No selected action use the current action
-  if(!action)
-    action = m_Ctx.CurAction();
+  const ActionDescription *action = m_Ctx.CurAction();
 
   if(action)
-  {
-    if(!action->children.empty())
-      action = action->children[0].previousAction;
-    else if(action->previousAction)
-      action = action->previousAction;
-  }
+    action = action->previous;
 
   while(action)
   {
@@ -5407,7 +5381,7 @@ void EventBrowser::on_stepPrev_clicked()
 
     // if it failed, possibly the previous action is filtered out. Step along the list until we find
     // one which isn't
-    action = action->previousAction;
+    action = action->previous;
   }
 
   // special case for the first 'virtual' action at EID 0
@@ -6069,24 +6043,6 @@ void EventBrowser::UpdateDurationColumn()
   m_TimeUnit = m_Ctx.Config().EventBrowser_TimeUnit;
 
   m_Model->UpdateDurationColumn();
-}
-
-void EventBrowser::updateStepNextPrevButtonState()
-{
-  QModelIndex current = ui->events->currentIndex();
-  if(current.isValid())
-  {
-    uint32_t selectedEID = GetSelectedEID(current);
-    const ActionDescription *action = m_Ctx.GetAction(selectedEID);
-    if(action && action->IsFakeMarker())
-      action = &action->children.back();
-
-    ui->stepPrev->setEnabled(action && action->previousAction);
-    ui->stepNext->setEnabled(action && action->nextAction);
-    // special case for the first action in the frame
-    if(selectedEID == 0)
-      ui->stepNext->setEnabled(true);
-  }
 }
 
 APIEvent EventBrowser::GetAPIEventForEID(uint32_t eid)

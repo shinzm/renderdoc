@@ -1,4 +1,4 @@
-API Reference: qrenderdoc Persistent Config
+API Reference: qrenderdoc Persistant Config
 ===========================================
 
 This is the API reference for the functions, classes, and enums in the ``qrenderdoc`` module which represents the UI-specific interface for integrating with the UI and writing UI extensions. For more high-level information and instructions on using the python API, see :doc:`../index` and :doc:`../ui_extensions`.
@@ -11,7 +11,7 @@ This is the API reference for the functions, classes, and enums in the ``qrender
 Config
 ------
 
-.. autoclass:: qrenderdoc.PersistentConfig
+.. autoclass:: qrenderdoc.PersistantConfig
   :members:
 
 .. autoclass:: qrenderdoc.TimeUnit

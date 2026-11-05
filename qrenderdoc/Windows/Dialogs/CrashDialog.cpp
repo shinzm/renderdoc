@@ -41,7 +41,7 @@
 
 const qint64 MaxUploadSize = 2250LL * 1024LL * 1024LL;
 
-CrashDialog::CrashDialog(PersistentConfig &cfg, QVariantMap crashReportJSON, QWidget *parent)
+CrashDialog::CrashDialog(PersistantConfig &cfg, QVariantMap crashReportJSON, QWidget *parent)
     : QDialog(parent), ui(new Ui::CrashDialog), m_Config(cfg)
 {
   ui->setupUi(this);
@@ -256,14 +256,14 @@ CrashDialog::~CrashDialog()
   delete ui;
 }
 
-bool CrashDialog::HasCaptureReady(PersistentConfig &cfg)
+bool CrashDialog::HasCaptureReady(PersistantConfig &cfg)
 {
   QFileInfo capInfo(cfg.CrashReport_LastOpenedCapture);
 
   return capInfo.exists() && capInfo.size() <= MaxUploadSize;
 }
 
-bool CrashDialog::CaptureTooLarge(PersistentConfig &cfg)
+bool CrashDialog::CaptureTooLarge(PersistantConfig &cfg)
 {
   QFileInfo capInfo(cfg.CrashReport_LastOpenedCapture);
 

@@ -1,3 +1,4 @@
+import renderdoc as rd
 import rdtest
 
 
@@ -7,6 +8,6 @@ class D3D12_Map_PlacedAlias(rdtest.TestCase):
     def check_capture(self):
         action = self.find_action("Draw")
 
-        self.set_event(action.eventId, True)
+        self.controller.SetFrameEvent(action.eventId, True)
 
         self.check_triangle()

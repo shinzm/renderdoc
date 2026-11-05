@@ -949,7 +949,7 @@ struct ImageInfo
     }
     aspects = FormatImageAspects(format);
 
-    if(GetImageUsageFlags(&ci) & VK_IMAGE_USAGE_STORAGE_BIT)
+    if(ci.usage & VK_IMAGE_USAGE_STORAGE_BIT)
     {
       storage = true;
     }
@@ -2406,8 +2406,8 @@ public:
   ResourceId baseResource;
   ResourceId baseResourceMem;    // for image views, we need to point to both the image and mem
 
-  VkDeviceSize memOffset = 0ULL;
-  VkDeviceSize memSize = 0ULL;
+  VkDeviceSize memOffset;
+  VkDeviceSize memSize;
   VkResourceType resType;
   bool storable = false;
   bool dedicated = false;
@@ -2627,9 +2627,6 @@ struct BlockShape
 
   // the number of bytes used to encode the block
   uint32_t bytes;
-
-  // the depth, for 3D ASTC only
-  uint32_t depth;
 };
 
 BlockShape GetBlockShape(VkFormat Format, uint32_t plane);

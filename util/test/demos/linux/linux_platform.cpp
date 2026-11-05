@@ -83,8 +83,3 @@ std::string GetExecutableName()
 
   return path;
 }
-
-uint32_t GetPID()
-{
-  return (uint32_t)getpid();
-}

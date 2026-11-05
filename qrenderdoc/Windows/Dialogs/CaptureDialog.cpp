@@ -35,6 +35,7 @@
 #include "Windows/MainWindow.h"
 #include "flowlayout/FlowLayout.h"
 #include "toolwindowmanager/ToolWindowManager.h"
+#include "LiveCapture.h"
 #include "ui_CaptureDialog.h"
 
 #define JSON_ID "rdocCaptureSettings"
@@ -470,8 +471,6 @@ void CaptureDialog::vulkanLayerWarn_mouseClick()
         bool needReg = RENDERDOC_NeedVulkanLayerRegistration(NULL);
         ui->vulkanLayerWarn->setVisible(needReg);
 
-        (void)admin;
-
 #if !defined(Q_OS_LINUX) || defined(Q_OS_FREEBSD)
         // can't alert the user on linux because the command might still be running - there's
         // seemingly no portable way to wait for the command to finish.
@@ -629,7 +628,7 @@ void CaptureDialog::lineEdit_keyPress(QKeyEvent *ev)
   if((ev->key() == Qt::Key_Return || ev->key() == Qt::Key_Enter) &&
      ev->modifiers() & Qt::ControlModifier)
   {
-    Launch();
+    TriggerCapture();
   }
 }
 
@@ -901,12 +900,12 @@ void CaptureDialog::on_loadLastCapture_clicked()
 
 void CaptureDialog::on_launch_clicked()
 {
-  Launch();
+  TriggerCapture();
 }
 
 void CaptureDialog::on_processList_activated(const QModelIndex &index)
 {
-  Launch();
+  TriggerCapture();
 }
 
 void CaptureDialog::SetSettings(CaptureSettings settings)
@@ -950,7 +949,7 @@ void CaptureDialog::SetSettings(CaptureSettings settings)
 
   if(settings.autoStart)
   {
-    Launch();
+    TriggerCapture();
   }
 }
 
@@ -1169,9 +1168,8 @@ void CaptureDialog::SetEnvironmentModifications(const rdcarray<EnvironmentModifi
   ui->envVar->setText(envModText);
 }
 
-ICaptureConnection *CaptureDialog::Launch()
+void CaptureDialog::TriggerCapture()
 {
-  ICaptureConnection *ret = NULL;
   if(IsInjectMode())
   {
     QModelIndexList sel = ui->processList->selectionModel()->selectedRows();
@@ -1186,13 +1184,11 @@ ICaptureConnection *CaptureDialog::Launch()
       QString name = m_ProcessModel->data(m_ProcessModel->index(item.row(), 0)).toString();
       uint32_t PID = m_ProcessModel->data(m_ProcessModel->index(item.row(), 1)).toUInt();
 
-      m_InjectCallback(PID, Settings().environment, name, Settings().options,
-                       [this, &ret](ICaptureConnection *live) {
-                         if(ui->queueFrameCap->isChecked())
-                           live->QueueCapture((int)ui->queuedFrame->value(),
-                                              (int)ui->numFrames->value());
-                         ret = live;
-                       });
+      m_InjectCallback(
+          PID, Settings().environment, name, Settings().options, [this](LiveCapture *live) {
+            if(ui->queueFrameCap->isChecked())
+              live->QueueCapture((int)ui->queuedFrame->value(), (int)ui->numFrames->value());
+          });
     }
     else
     {
@@ -1209,7 +1205,7 @@ ICaptureConnection *CaptureDialog::Launch()
       RDDialog::critical(this, tr("No executable selected"),
                          tr("No program selected to launch, click browse next to 'Executable Path' "
                             "above to select the program to launch."));
-      return NULL;
+      return;
     }
 
     // for non-remote captures, check the executable locally
@@ -1221,7 +1217,7 @@ ICaptureConnection *CaptureDialog::Launch()
             this, tr("Invalid executable"),
             tr("Invalid executable: %1\nCan't locate this path or a matching executable in PATH")
                 .arg(exe));
-        return NULL;
+        return;
       }
     }
 
@@ -1235,7 +1231,7 @@ ICaptureConnection *CaptureDialog::Launch()
         RDDialog::critical(
             this, tr("Invalid working directory"),
             tr("Invalid working directory: %1\nThis path does not exist").arg(workingDir));
-        return NULL;
+        return;
       }
     }
 
@@ -1257,18 +1253,15 @@ ICaptureConnection *CaptureDialog::Launch()
                               "The intent arguments must include the full parameters e.g. "
                               "--es args \"my arguments\"")
                                .arg(cmdLine));
-        return NULL;
+        return;
       }
     }
 
     m_CaptureCallback(exe, workingDir, cmdLine, Settings().environment, Settings().options,
-                      [this, &ret](ICaptureConnection *live) {
+                      [this](LiveCapture *live) {
                         if(ui->queueFrameCap->isChecked())
                           live->QueueCapture((int)ui->queuedFrame->value(),
                                              (int)ui->numFrames->value());
-                        ret = live;
                       });
   }
-
-  return ret;
 }

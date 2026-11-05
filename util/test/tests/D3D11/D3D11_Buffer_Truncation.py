@@ -1,4 +1,5 @@
 import rdtest
+import renderdoc as rd
 
 
 class D3D11_Buffer_Truncation(rdtest.Buffer_Truncation):

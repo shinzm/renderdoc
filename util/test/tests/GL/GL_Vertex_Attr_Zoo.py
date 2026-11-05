@@ -9,11 +9,11 @@ class GL_Vertex_Attr_Zoo(rdtest.TestCase):
     def check_capture(self):
         action = self.find_action("Draw")
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        ref: rdtest.MeshReference = {
+        ref = {
             0: {
                 'SNorm': [1.0, -1.0, 1.0, -1.0],
                 'UNorm': [12345.0/65535.0, 6789.0/65535.0, 1234.0/65535.0, 567.0/65535.0],
@@ -50,14 +50,14 @@ class GL_Vertex_Attr_Zoo(rdtest.TestCase):
         }
 
         # Copy the ref values and prepend 'In'
-        in_ref: rdtest.MeshReference = {}
+        in_ref = {}
         for idx in ref:
             in_ref[idx] = {}
             for key in ref[idx]:
                 in_ref[idx]['In' + key] = ref[idx][key]
 
         # Copy the ref values and prepend 'Out'
-        out_ref: rdtest.MeshReference = {}
+        out_ref = {}
         for idx in ref:
             out_ref[idx] = {}
             for key in ref[idx]:
@@ -86,7 +86,7 @@ class GL_Vertex_Attr_Zoo(rdtest.TestCase):
 
         rdtest.log.success("Geometry output data is as expected")
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         self.check_pixel_value(pipe.GetOutputTargets()[0].resource, 0.5, 0.5, [0.0, 1.0, 0.0, 1.0])
 

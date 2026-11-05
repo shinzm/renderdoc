@@ -93,7 +93,7 @@ public:
   }
   IReplayDriver *MakeDummyDriver()
   {
-    IReplayDriver *ret = new DummyDriver(this, {}, m_File, {});
+    IReplayDriver *ret = new DummyDriver(this, {}, m_File);
     // lose our structured file reference
     m_File = NULL;
     return ret;
@@ -206,12 +206,7 @@ public:
   }
   rdcarray<ResourceDescription> GetResources() { return m_Resources; }
   rdcarray<TextureDescription> GetTextures() { return {m_TexDetails}; }
-  TextureDescription GetTexture(ResourceId id)
-  {
-    if(id != m_CustomTexID)
-      return m_TexDetails;
-    return m_Proxy->GetTexture(id);
-  }
+  TextureDescription GetTexture(ResourceId id) { return m_TexDetails; }
   void GetTextureData(ResourceId tex, const Subresource &sub, const GetTextureDataParams &params,
                       bytebuf &data)
   {

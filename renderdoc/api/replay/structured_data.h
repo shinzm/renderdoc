@@ -292,12 +292,7 @@ protected:
 
 DECLARE_REFLECTION_STRUCT(SDType);
 
-DOCUMENT(R"(
-SDChunkMetaData()
-SDChunkMetaData(other: SDChunkMetaData)
-
-The metadata that goes along with a :class:`SDChunk` to detail how it was recorded.
-)");
+DOCUMENT("The metadata that goes along with a :class:`SDChunk` to detail how it was recorded.");
 struct SDChunkMetaData
 {
   DOCUMENT("");
@@ -505,11 +500,7 @@ struct LazyArrayData
 };
 #endif
 
-DOCUMENT(R"(
-SDObject()
-SDObject(name: str, typeName: str)
-
-Defines a single structured object. Structured objects are defined recursively and one
+DOCUMENT(R"(Defines a single structured object. Structured objects are defined recursively and one
 object can either be a basic type (integer, float, etc), an array, or a struct. Arrays and structs
 are defined similarly.
 
@@ -707,7 +698,7 @@ returned.
 
 :param str childName: The name to search for.
 :return: A reference to the child object if found, or ``None`` if not.
-:rtype: Optional[SDObject]
+:rtype: SDObject
 )");
   inline SDObject *FindChild(const rdcstr &childName)
   {
@@ -724,7 +715,7 @@ The order of the search is not guaranteed, so care should be taken when the name
 
 :param str childName: The name to search for.
 :return: A reference to the child object if found, or ``None`` if not.
-:rtype: Optional[SDObject]
+:rtype: SDObject
 )");
   inline SDObject *FindChildRecursively(const rdcstr &childName)
   {
@@ -801,7 +792,7 @@ manipulated by key path exclusively or not at all.
 
 :param str keyPath: The key path to search for and return.
 :return: Whether or not a child exists at the given key path
-:rtype: Optional[SDObject]
+:rtype: SDObject
 )");
   inline const SDObject *FindChildByKeyPath(const rdcstr &keyPath) const
   {
@@ -868,7 +859,7 @@ returned.
 
 :param int index: The index to look up.
 :return: A reference to the child object if valid, or ``None`` if not.
-:rtype: Optional[SDObject]
+:rtype: SDObject
 )");
   inline SDObject *GetChild(size_t index)
   {
@@ -884,7 +875,7 @@ returned.
   DOCUMENT(R"(Get the parent of this object. If this object has no parent, ``None`` is returned.
 
 :return: A reference to the parent object if valid, or ``None`` if not.
-:rtype: Optional[SDObject]
+:rtype: SDObject
 )");
   inline SDObject *GetParent() { return m_Parent; }
 #if !defined(SWIG)
@@ -1501,7 +1492,7 @@ DOCUMENT(R"(Make a structured object as an enum value.
 
 .. note::
   The enum will be stored just as an integer value, but the string name of the enumeration value can
-  be set by changing the string data member if desired.
+  be set with :meth:`SDObject.SetCustomString` if desired.
 
 :param str name: The name of the object.
 :param int val: The integer value of the enum itself.
@@ -1578,11 +1569,7 @@ SDOBJECT_MAKER(ResourceId, makeSDResourceId);
 
 #endif
 
-DOCUMENT(R"(
-SDChunk()
-
-Defines a single structured chunk, which is a :class:`SDObject`.
-)");
+DOCUMENT("Defines a single structured chunk, which is a :class:`SDObject`.");
 struct SDChunk : public SDObject
 {
   /////////////////////////////////////////////////////////////////
@@ -1722,11 +1709,7 @@ private:
 
 DECLARE_REFLECTION_STRUCT(StructuredBufferList);
 
-DOCUMENT(R"(
-SDFile()
-
-Contains the structured information in a file. Owns the buffers and chunks.
-)");
+DOCUMENT("Contains the structured information in a file. Owns the buffers and chunks.");
 struct SDFile
 {
 private:

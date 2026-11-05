@@ -64,12 +64,9 @@ public:
   // processed.
   // the manager processes only the request on the top of the queue, so when a new tagged invoke
   // comes in, we remove any other requests in the queue before it that have the same tag
-  void AsyncInvoke(ReplayInvokeCallback m, rdcstr tag = "");
-  using IReplayManager::AsyncInvoke;
-  void BlockInvoke(ReplayInvokeCallback m);
-
-  bool AccessInvoke(std::function<void(ICaptureAccess *)> callback, bool blocking, bool forceReplay,
-                    rdcstr tag);
+  void AsyncInvoke(const rdcstr &tag, InvokeCallback m);
+  void AsyncInvoke(InvokeCallback m);
+  void BlockInvoke(InvokeCallback m);
 
   void CancelReplayLoop();
 
@@ -107,7 +104,7 @@ public:
 private:
   struct InvokeHandle
   {
-    InvokeHandle(ReplayInvokeCallback m, const QString &t = QString())
+    InvokeHandle(InvokeCallback m, const QString &t = QString())
     {
       tag = t;
       method = m;
@@ -115,7 +112,7 @@ private:
     }
 
     QString tag;
-    ReplayInvokeCallback method;
+    InvokeCallback method;
     QSemaphore processed;
     bool selfdelete;
   };

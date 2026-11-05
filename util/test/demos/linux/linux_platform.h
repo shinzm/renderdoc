@@ -26,7 +26,6 @@
 
 #include <dlfcn.h>
 #include <signal.h>
-#include <stdint.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -43,4 +42,3 @@
 #define MakeDir(dir) mkdir(dir, 0755)
 
 std::string GetExecutableName();
-uint32_t GetPID();

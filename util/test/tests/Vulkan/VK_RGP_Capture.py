@@ -7,7 +7,7 @@ class VK_RGP_Capture(rdtest.TestCase):
     demos_test_name = 'VK_Simple_Triangle'
 
     def check_capture(self):
-        apiprops = self.controller.GetAPIProperties()
+        apiprops: rd.APIProperties = self.controller.GetAPIProperties()
 
         if not apiprops.rgpCapture:
             rdtest.log.print("RGP capture not tested")

@@ -327,18 +327,6 @@ rdcstr DoStringise(const CullMode &el)
 }
 
 template <>
-rdcstr DoStringise(const DepthBiasMode &el)
-{
-  BEGIN_ENUM_STRINGISE(DepthBiasMode)
-  {
-    STRINGISE_ENUM_CLASS(Default);
-    STRINGISE_ENUM_CLASS(ForceUNorm);
-    STRINGISE_ENUM_CLASS(One);
-  }
-  END_ENUM_STRINGISE();
-}
-
-template <>
 rdcstr DoStringise(const ConservativeRaster &el)
 {
   BEGIN_ENUM_STRINGISE(ConservativeRaster)
@@ -743,7 +731,6 @@ rdcstr DoStringise(const DescriptorType &el)
     STRINGISE_ENUM_CLASS_NAMED(Sampler, "Sampler");
     STRINGISE_ENUM_CLASS_NAMED(ImageSampler, "Image & Sampler");
     STRINGISE_ENUM_CLASS_NAMED(Image, "Image");
-    STRINGISE_ENUM_CLASS_NAMED(Buffer, "Buffer");
     STRINGISE_ENUM_CLASS_NAMED(TypedBuffer, "Typed Buffer");
     STRINGISE_ENUM_CLASS_NAMED(ReadWriteImage, "RW Image");
     STRINGISE_ENUM_CLASS_NAMED(ReadWriteTypedBuffer, "RW Typed Buffer");

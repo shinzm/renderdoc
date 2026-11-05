@@ -159,7 +159,7 @@ void WriteAnnotation(SDObject *obj, RENDERDOC_AnnotationType valueType, uint32_t
       return;
     }
 
-    const rdcinflexiblestr comps[] = {"1"_lit, "2"_lit, "3"_lit, "4"_lit};
+    const rdcinflexiblestr comps[] = {"x"_lit, "y"_lit, "z"_lit, "w"_lit};
 
     obj->type.basetype = SDBasic::Struct;
     obj->type.name = types[valueType][valueVectorWidth - 1];
@@ -751,13 +751,6 @@ void RenderDoc::Initialise()
   if(IsReplayApp())
     RDCLOGOUTPUT();
 
-  if(IsReplayApp())
-  {
-    for(auto it = m_EnvSetups.begin(); it != m_EnvSetups.end(); ++it)
-      (*it)();
-    m_EnvSetups.clear();
-  }
-
   ProcessConfig();
 }
 
@@ -768,7 +761,9 @@ RenderDoc::~RenderDoc()
     UnloadCrashHandler();
   }
 
-  ShutdownReplay();
+  for(auto it = m_ShutdownFunctions.begin(); it != m_ShutdownFunctions.end(); ++it)
+    (*it)();
+  m_ShutdownFunctions.clear();
 
   for(size_t i = 0; i < m_Captures.size(); i++)
   {
@@ -886,14 +881,36 @@ void RenderDoc::InitialiseReplay(GlobalEnvironment env, const rdcarray<rdcstr> &
 
 #if ENABLED(RDOC_WIN32)
           for(const char *driverDLL : {
-                  "amdvlk32.dll",     "amdvlk64.dll",     "atiadlxx.dll",    "atig6pxx.dll",
-                  "atig6txx.dll",     "atigktxx.dll",     "atiglpxx.dll",    "atimuixx.dll",
-                  "atio6axx.dll",     "atioglxx.dll",     "ControlLib.dll",  "ControlLib32.dll",
-                  "igd10iumd32.dll",  "igd10iumd64.dll",  "igd12umd32.dll",  "igd12umd64.dll",
-                  "igc32.dll",        "igc64.dll",        "igvk32.dll",      "igvk64.dll",
-                  "igxelpgicd32.dll", "igxelpgicd64.dll", "igxelpicd32.dll", "igxelpicd32.dll",
-                  "igxelpicd64.dll",  "igxelpicd64.dll",  "nvoglv32.dll",    "nvoglv64.dll",
-                  "nvwgf2um.dll",     "nvwgf2umx.dll",
+                  "amdvlk32.dll",
+                  "amdvlk64.dll",
+                  "atiadlxx.dll",
+                  "atig6pxx.dll",
+                  "atig6txx.dll",
+                  "atigktxx.dll",
+                  "atiglpxx.dll",
+                  "atimuixx.dll",
+                  "atio6axx.dll",
+                  "atioglxx.dll",
+                  "ControlLib.dll",
+                  "ControlLib32.dll",
+                  "igd10iumd32.dll",
+                  "igd10iumd64.dll",
+                  "igd12umd32.dll",
+                  "igd12umd64.dll",
+                  "igc32.dll",
+                  "igc64.dll",
+                  "igvk32.dll",
+                  "igvk64.dll"
+                  "igxelpgicd32.dll",
+                  "igxelpgicd64.dll",
+                  "igxelpicd32.dll",
+                  "igxelpicd32.dll",
+                  "igxelpicd64.dll",
+                  "igxelpicd64.dll",
+                  "nvoglv32.dll",
+                  "nvoglv64.dll",
+                  "nvwgf2um.dll",
+                  "nvwgf2umx.dll",
               })
           {
             HMODULE mod = GetModuleHandleA(driverDLL);
@@ -1026,21 +1043,13 @@ void RenderDoc::ShutdownReplay()
 
   // call shutdown functions early, as we only want to do these in the RenderDoc destructor if we
   // have no other choice (i.e. we're capturing).
-  rdcarray<ShutdownFunction> funcs;
-  {
-    SCOPED_LOCK(m_ShutdownLock);
-    funcs.swap(m_ShutdownFunctions);
-  }
-
-  for(auto it = funcs.begin(); it != funcs.end(); ++it)
+  for(auto it = m_ShutdownFunctions.begin(); it != m_ShutdownFunctions.end(); ++it)
     (*it)();
-  funcs.clear();
+  m_ShutdownFunctions.clear();
 }
 
 void RenderDoc::RegisterShutdownFunction(ShutdownFunction func)
 {
-  SCOPED_LOCK(m_ShutdownLock);
-
   auto it = std::lower_bound(m_ShutdownFunctions.begin(), m_ShutdownFunctions.end(), func);
   if(it == m_ShutdownFunctions.end() || *it != func)
     m_ShutdownFunctions.insert(it - m_ShutdownFunctions.begin(), func);
@@ -2468,9 +2477,9 @@ bool RenderDoc::DoesTrackedFileExist(const rdcstr &nickname) const
 // return false if the nickname already exists
 bool RenderDoc::AddTrackedFileReference(const rdcstr &nickname, const rdcstr &filepath)
 {
+  if(DoesTrackedFileExist(nickname))
+    return false;
   SCOPED_WRITELOCK(m_TrackedFilesLock);
-  // do not allow duplicates, overwrite with latest if we add the same one
-  m_TrackedFiles.removeIf([nickname](const TrackedFile &f) { return f.nickname == nickname; });
   m_TrackedFiles.emplace_back(nickname, filepath);
   return true;
 }

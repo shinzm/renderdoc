@@ -6,31 +6,26 @@ import rdtest
 class Overlay_Test(rdtest.TestCase):
     internal = True
 
-    def check_capture(self):
-        self.check_overlay_capture(0)
-
-    def check_overlay_capture(self, base_event: int):
+    def check_capture(self, base_event=0):
         if base_event != 0:
-            rdtest.log.print(f"Checking overlays from base event {base_event}")
+            rdtest.log.print("Checking overlays from base event {}".format(base_event))
 
-        out = self.controller.CreateOutput(rd.CreateHeadlessWindowingData(100, 100), rd.ReplayOutputType.Texture)
+        out: rd.ReplayOutput = self.controller.CreateOutput(rd.CreateHeadlessWindowingData(100, 100), rd.ReplayOutputType.Texture)
 
-        assert out is not None
+        self.check(out is not None)
 
-        api = self.controller.GetAPIProperties().pipelineType
+        api: rd.GraphicsAPI = self.controller.GetAPIProperties().pipelineType
 
         fmts = ["D24_S8", "D32F_S8", "D16_S0", "D24_S0", "D32F_S0"]
-
-        tex = rd.TextureDisplay()
 
         # Check the actual output is as expected first.
         for fmt in fmts:
             marker_name = "Normal Test " + fmt
-            test_marker = self.find_action(marker_name, base_event)
+            test_marker: rd.ActionDescription = self.find_action(marker_name, base_event)
             if test_marker == None:
-                rdtest.log.print(f"Skipping format {fmt} marker {marker_name} not found")
+                rdtest.log.print("Skipping format {} marker {} not found".format(fmt, marker_name))
                 continue
-            rdtest.log.begin_section(f"Checking format {fmt}")
+            rdtest.log.begin_section("Checking format {}".format(fmt))
             has_stencil = fmt.endswith("_S8")
             for is_msaa in [False, True]:
                 if is_msaa:
@@ -38,16 +33,17 @@ class Overlay_Test(rdtest.TestCase):
                 else:
                     marker_name = "Normal Test "
                 marker_name += fmt
-                test_marker = self.find_action(marker_name, base_event)
+                test_marker: rd.ActionDescription = self.find_action(marker_name, base_event)
 
-                self.set_event(test_marker.nextAction.eventId, True)
+                self.controller.SetFrameEvent(test_marker.next.eventId, True)
 
-                rdtest.log.print(f"Checking overlays at event {test_marker.nextAction.eventId}: {marker_name}")
+                rdtest.log.print("Checking overlays at event {}: {}".format(test_marker.next.eventId, marker_name))
 
-                pipe = self.controller.GetPipelineState()
+                pipe: rd.PipeState = self.controller.GetPipelineState()
 
-                col_tex = pipe.GetOutputTargets()[0].resource
+                col_tex: rd.ResourceId = pipe.GetOutputTargets()[0].resource
 
+                tex = rd.TextureDisplay()
                 tex.resourceId = col_tex
                 tex.subresource.sample = 0
 
@@ -97,7 +93,7 @@ class Overlay_Test(rdtest.TestCase):
                     if overlay == rd.DebugOverlay.Stencil and not has_stencil:
                         continue
 
-                    rdtest.log.print(f"Checking overlay {overlay!s} in {'MSAA' if is_msaa else 'normal'} main action Format {fmt}")
+                    rdtest.log.print("Checking overlay {} in {} main action Format {}".format(str(overlay), "MSAA" if is_msaa else "normal", fmt))
 
                     tex.overlay = overlay
                     out.SetTextureDisplay(tex)
@@ -106,7 +102,7 @@ class Overlay_Test(rdtest.TestCase):
 
                     eps = 1.0 / 256.0
 
-                    overlay_id = out.GetDebugOverlayTexID()
+                    overlay_id: rd.ResourceId = out.GetDebugOverlayTexID()
 
                     # We test a few key spots:
                     #  4 points along the left side of the big triangle, above/in/below its intersection with the tri behind
@@ -149,10 +145,10 @@ class Overlay_Test(rdtest.TestCase):
                         # Also to be safe we don't run this test on MSAA
                         if not is_msaa:
                             x = 142
-                            picked = self.pick_pixel(overlay_id, x, 150, rd.Subresource(), rd.CompType.Typeless)
+                            picked: rd.PixelValue = self.controller.PickPixel(overlay_id, x, 150, rd.Subresource(), rd.CompType.Typeless)
                             if picked.floatValue[3] == 0.0:
                                 x = 141
-                            picked = self.pick_pixel(overlay_id, x, 150, rd.Subresource(), rd.CompType.Typeless)
+                            picked: rd.PixelValue = self.controller.PickPixel(overlay_id, x, 150, rd.Subresource(), rd.CompType.Typeless)
 
                             self.check_pixel_value(overlay_id, x, 90, [200.0/255.0, 1.0, 0.0, 1.0], eps=eps)
                             self.check_pixel_value(overlay_id, x, 130, [200.0/255.0, 1.0, 0.0, 1.0], eps=eps)
@@ -165,7 +161,7 @@ class Overlay_Test(rdtest.TestCase):
                             self.check_pixel_value(overlay_id, 250, 250, [200.0/255.0, 1.0, 0.0, 0.0], eps=eps)
 
                             y = 149
-                            picked = self.pick_pixel(overlay_id, 325, y, rd.Subresource(), rd.CompType.Typeless)
+                            picked: rd.PixelValue = self.controller.PickPixel(overlay_id, 325, y, rd.Subresource(), rd.CompType.Typeless)
                             if picked.floatValue[3] == 0.0:
                                 y = 150
 
@@ -418,33 +414,31 @@ class Overlay_Test(rdtest.TestCase):
                         self.check_pixel_value(overlay_id, 200, 79, [3.0, 3.0, 3.0, 1.0], eps=eps)
                         self.check_pixel_value(overlay_id, 200, 93, [1.33, 1.33, 1.33, 1.0], eps=eps)
 
-                    rdtest.log.success(f"Picked pixels are as expected for {overlay!s} Format {fmt}")
+                    rdtest.log.success("Picked pixels are as expected for {} Format {}".format(str(overlay), fmt))
 
                 if is_msaa:
-                    rdtest.log.success(f"All MSAA overlays are as expected Format {fmt}")
+                    rdtest.log.success("All MSAA overlays are as expected Format {}".format(fmt))
                 else:
-                    rdtest.log.success(f"All normal overlays are as expected Format {fmt}")
-
-            eps = 0.01
+                    rdtest.log.success("All normal overlays are as expected Format {}".format(fmt))
 
             # Shader with discard
-            test_marker = self.find_action("Discard " + marker_name, base_event)
-            self.set_event(test_marker.nextAction.eventId, True)
-            pipe = self.controller.GetPipelineState()
+            test_marker: rd.ActionDescription = self.find_action("Discard " + marker_name, base_event)
+            self.controller.SetFrameEvent(test_marker.next.eventId, True)
+            pipe: rd.PipeState = self.controller.GetPipelineState()
             tex.overlay = rd.DebugOverlay.Depth
             out.SetTextureDisplay(tex)
             out.Display()
-            overlay_id = out.GetDebugOverlayTexID()
+            overlay_id: rd.ResourceId = out.GetDebugOverlayTexID()
             self.check_pixel_value(overlay_id, 330, 40, [0.0, 1.0, 0.0, 1.0], eps=eps)
 
             # Check the viewport overlay especially
-            view_marker = self.find_action("Viewport Test " + fmt, base_event)
+            view_marker: rd.ActionDescription = self.find_action("Viewport Test " + fmt, base_event)
 
-            self.set_event(view_marker.nextAction.eventId, True)
+            self.controller.SetFrameEvent(view_marker.next.eventId, True)
 
-            pipe = self.controller.GetPipelineState()
+            pipe: rd.PipeState = self.controller.GetPipelineState()
 
-            col_tex = pipe.GetOutputTargets()[0].resource
+            col_tex: rd.ResourceId = pipe.GetOutputTargets()[0].resource
 
             for overlay in rd.DebugOverlay:
                 if overlay == rd.DebugOverlay.NoOverlay:
@@ -458,7 +452,7 @@ class Overlay_Test(rdtest.TestCase):
                 if overlay == rd.DebugOverlay.ClearBeforeDraw or overlay == rd.DebugOverlay.ClearBeforePass:
                     continue
 
-                rdtest.log.print(f"Checking overlay {overlay!s} in viewport action Format {fmt}")
+                rdtest.log.print("Checking overlay {} in viewport action Format {}".format(str(overlay), fmt))
 
                 tex.resourceId = col_tex
                 tex.overlay = overlay
@@ -468,7 +462,7 @@ class Overlay_Test(rdtest.TestCase):
 
                 eps = 1.0 / 256.0
 
-                overlay_id = out.GetDebugOverlayTexID()
+                overlay_id: rd.ResourceId = out.GetDebugOverlayTexID()
 
                 save_data = rd.TextureSave()
                 save_data.resourceId = overlay_id
@@ -552,16 +546,16 @@ class Overlay_Test(rdtest.TestCase):
                     self.check_pixel_value(overlay_id, 200, 270, [43072.0, 43072.0, 43072.0, 1.0], eps=eps)
                     self.check_pixel_value(overlay_id, 200, 280, [0.0, 0.0, 0.0, 0.0], eps=eps)
 
-                rdtest.log.success(f"Picked pixels are as expected for {overlay!s} Format {fmt}")
+                rdtest.log.success("Picked pixels are as expected for {} Format {}".format(str(overlay), fmt))
 
-            rdtest.log.success(f"Overlays are as expected around viewport/scissor behaviour Format {fmt}")
+            rdtest.log.success("Overlays are as expected around viewport/scissor behaviour Format {}".format(fmt))
 
             # Check the sample mask test
-            mask_marker = self.find_action("Sample Mask Test " + fmt, base_event)
+            mask_marker: rd.ActionDescription = self.find_action("Sample Mask Test " + fmt, base_event)
 
-            self.set_event(mask_marker.nextAction.eventId, True)
+            self.controller.SetFrameEvent(mask_marker.next.eventId, True)
 
-            col_tex = pipe.GetOutputTargets()[0].resource
+            col_tex: rd.ResourceId = pipe.GetOutputTargets()[0].resource
 
             # Check just highlight drawcall to make sure it renders on sample 0
             tex.resourceId = col_tex
@@ -569,7 +563,7 @@ class Overlay_Test(rdtest.TestCase):
             out.SetTextureDisplay(tex)
             out.Display()
 
-            overlay_id = out.GetDebugOverlayTexID()
+            overlay_id: rd.ResourceId = out.GetDebugOverlayTexID()
 
             save_data = rd.TextureSave()
             save_data.resourceId = overlay_id
@@ -584,14 +578,14 @@ class Overlay_Test(rdtest.TestCase):
             self.check_pixel_value(overlay_id, 40, 1, [0.0, 0.0, 0.0, 0.5], eps=eps)
             self.check_pixel_value(overlay_id, 40, 90, [0.0, 0.0, 0.0, 0.5], eps=eps)
 
-            rdtest.log.success(f"Overlays are as expected around sample mask behaviour Format {fmt}")
+            rdtest.log.success("Overlays are as expected around sample mask behaviour Format {}".format(fmt))
 
-            test_marker = self.find_action("Normal Test " + fmt, base_event)
+            test_marker: rd.ActionDescription = self.find_action("Normal Test " + fmt, base_event)
 
             # Now check clear-before-X by hand, for colour and for depth
-            self.set_event(test_marker.nextAction.eventId, True)
+            self.controller.SetFrameEvent(test_marker.next.eventId, True)
 
-            col_tex = pipe.GetOutputTargets()[0].resource
+            col_tex: rd.ResourceId = pipe.GetOutputTargets()[0].resource
 
             depth_tex = pipe.GetDepthTarget().resource
 
@@ -628,7 +622,7 @@ class Overlay_Test(rdtest.TestCase):
                 self.check_pixel_value(depth_tex, 250, 250, [0.95, 0.0, 0.0, 1.0], eps=eps)
                 self.check_pixel_value(depth_tex, 50, 50, [1.0, 0.0, 0.0, 1.0], eps=eps)
 
-            rdtest.log.success(f"Colour and depth at end are correct Format {fmt}")
+            rdtest.log.success("Colour and depth at end are correct Format {}".format(fmt))
 
             # Check clear before pass
             tex.resourceId = col_tex
@@ -672,7 +666,7 @@ class Overlay_Test(rdtest.TestCase):
                 self.check_pixel_value(depth_tex, 250, 250, [0.95, 0.0, 0.0, 1.0], eps=eps)
                 self.check_pixel_value(depth_tex, 50, 50, [1.0, 0.0, 0.0, 1.0], eps=eps)
 
-            rdtest.log.success(f"Clear before pass colour and depth values as expected Format {fmt}")
+            rdtest.log.success("Clear before pass colour and depth values as expected Format {}".format(fmt))
 
             # Check clear before action
             tex.resourceId = col_tex
@@ -716,21 +710,21 @@ class Overlay_Test(rdtest.TestCase):
                 self.check_pixel_value(depth_tex, 250, 250, [1.0, 0.0, 0.0, 1.0], eps=eps)
                 self.check_pixel_value(depth_tex, 50, 50, [1.0, 0.0, 0.0, 1.0], eps=eps)
 
-            rdtest.log.success(f"Clear before action colour and depth values as expected Format {fmt}")
+            rdtest.log.success("Clear before action colour and depth values as expected Format {}".format(fmt))
 
-            rdtest.log.success(f"All overlays as expected for main action Format {fmt}")
+            rdtest.log.success("All overlays as expected for main action Format {}".format(fmt))
 
-            rdtest.log.end_section(f"Checking format {fmt}")
+            rdtest.log.end_section("Checking format {}".format(fmt))
 
         rdtest.log.begin_section("Checking mip/slice rendering")
 
         # Now test overlays on a render-to-slice/mip case
         for mip in [2, 3]:
-            sub_marker = self.find_action(f"Subresources mip {mip}", base_event)
+            sub_marker: rd.ActionDescription = self.find_action("Subresources mip {}".format(mip), base_event)
 
-            self.set_event(sub_marker.nextAction.eventId, True)
+            self.controller.SetFrameEvent(sub_marker.next.eventId, True)
 
-            pipe = self.controller.GetPipelineState()
+            pipe: rd.PipeState = self.controller.GetPipelineState()
 
             col_tex = pipe.GetOutputTargets()[0].resource
             sub = rd.Subresource(pipe.GetOutputTargets()[0].firstMip, pipe.GetOutputTargets()[0].firstSlice, 0)
@@ -746,7 +740,7 @@ class Overlay_Test(rdtest.TestCase):
                 if overlay == rd.DebugOverlay.ClearBeforeDraw or overlay == rd.DebugOverlay.ClearBeforePass:
                     continue
 
-                rdtest.log.print(f"Checking overlay {overlay!s} with mip/slice rendering")
+                rdtest.log.print("Checking overlay {} with mip/slice rendering".format(str(overlay)))
 
                 tex.resourceId = col_tex
                 tex.overlay = overlay
@@ -755,7 +749,7 @@ class Overlay_Test(rdtest.TestCase):
 
                 out.Display()
 
-                overlay_id = out.GetDebugOverlayTexID()
+                overlay_id: rd.ResourceId = out.GetDebugOverlayTexID()
 
                 shift = 0
                 if mip == 3:
@@ -771,9 +765,7 @@ class Overlay_Test(rdtest.TestCase):
                 self.check_pixel_value(overlay_id, 197 >> shift, 147 >> shift, [0.0, 0.0, 0.0, 0.0], sub=rd.Subresource(mip, 0, 0))
                 self.check_pixel_value(overlay_id, 203 >> shift, 153 >> shift, [0.0, 0.0, 0.0, 0.0], sub=rd.Subresource(mip, 0, 0))
 
-                rdtest.log.success(f"Other mips are empty as expected for overlay {overlay!s}")
-
-                eps = 0.001
+                rdtest.log.success("Other mips are empty as expected for overlay {}".format(str(overlay)))
 
                 if overlay == rd.DebugOverlay.Drawcall:
                     self.check_pixel_value(overlay_id, 50 >> shift, 36 >> shift, [0.8, 0.1, 0.8, 1.0], sub=sub, eps=eps)
@@ -841,7 +833,7 @@ class Overlay_Test(rdtest.TestCase):
                     else:
                         self.check_pixel_value(overlay_id, 50 >> shift, 45 >> shift, [30.359375, 30.359375, 30.359375, 1.0], sub=sub, eps=1/16)
 
-                rdtest.log.success(f"Picked values are correct for mip {sub.mip} overlay {overlay!s}")
+                rdtest.log.success("Picked values are correct for mip {} overlay {}".format(sub.mip, str(overlay)))
 
         rdtest.log.end_section("Checking mip/slice rendering")
 

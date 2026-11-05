@@ -26,7 +26,7 @@
 
 // subobject headers have to be aligned to pointer boundaries
 #define SUBOBJECT_HEADER(subobj)                                               \
-  alignas(void *) D3D12_PIPELINE_STATE_SUBOBJECT_TYPE CONCAT(header, subobj) = \
+  D3D12_PIPELINE_STATE_SUBOBJECT_TYPE alignas(void *) CONCAT(header, subobj) = \
       CONCAT(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_, subobj);
 
 struct GraphicsStreamData

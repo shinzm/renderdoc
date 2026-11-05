@@ -380,11 +380,6 @@ inline LoopControlAndParamDatas DecodeParam(const ConstIter &it, uint32_t &word)
     ret.maxReinvocationDelayALTERA = (uint32_t)it.word(word);
     word += 1;
   }
-  if(ret.flags & LoopControl::MultipleWaitQueuesQCOM)
-  {
-    ret.multipleWaitQueuesQCOM = (uint32_t)it.word(word);
-    word += 1;
-  }
   return ret;
 }
 
@@ -451,10 +446,6 @@ inline void EncodeParam(rdcarray<uint32_t> &words, const LoopControlAndParamData
   {
     words.push_back((uint32_t)param.maxReinvocationDelayALTERA);
   }
-  if(param.flags & LoopControl::MultipleWaitQueuesQCOM)
-  {
-    words.push_back((uint32_t)param.multipleWaitQueuesQCOM);
-  }
 }
 
 inline uint16_t ExtraWordCount(const LoopControl loopControl)
@@ -476,7 +467,6 @@ inline uint16_t ExtraWordCount(const LoopControl loopControl)
     case LoopControl::SpeculatedIterationsALTERA: return 1;
     case LoopControl::LoopCountALTERA: return 1;
     case LoopControl::MaxReinvocationDelayALTERA: return 1;
-    case LoopControl::MultipleWaitQueuesQCOM: return 1;
     default: break;
   }
   return 0;
@@ -1022,19 +1012,6 @@ struct ExecutionModeParam<ExecutionMode::FPFastMathDefault>
 };
 
 template<>
-struct ExecutionModeParam<ExecutionMode::OpacityMicromapIdKHR>
-{
-  Id opacityMicromapIdKHR;
-  ExecutionModeParam(Id opacityMicromapIdKHRParam) {  opacityMicromapIdKHR = opacityMicromapIdKHRParam; }
-  operator ExecutionModeAndParamData()
-  {
-    ExecutionModeAndParamData ret(ExecutionMode::OpacityMicromapIdKHR);
-    ret.opacityMicromapIdKHR = opacityMicromapIdKHR;
-    return ret;
-  }
-};
-
-template<>
 struct ExecutionModeParam<ExecutionMode::StreamingInterfaceINTEL>
 {
   uint32_t streamingInterfaceINTEL;
@@ -1273,10 +1250,6 @@ inline ExecutionModeAndParamData DecodeParam(const ConstIter &it, uint32_t &word
       ret.fPFastMathDefault.fastMathMode = Id::fromWord(it.word(word+1));
       word += 2;
       break;
-    case ExecutionMode::OpacityMicromapIdKHR:
-      ret.opacityMicromapIdKHR = Id::fromWord(it.word(word));
-      word += 1;
-      break;
     case ExecutionMode::StreamingInterfaceINTEL:
       ret.streamingInterfaceINTEL = (uint32_t)it.word(word);
       word += 1;
@@ -1428,9 +1401,6 @@ inline void EncodeParam(rdcarray<uint32_t> &words, const ExecutionModeAndParamDa
       words.push_back(param.fPFastMathDefault.targetType.value());
       words.push_back(param.fPFastMathDefault.fastMathMode.value());
       break;
-    case ExecutionMode::OpacityMicromapIdKHR:
-      words.push_back(param.opacityMicromapIdKHR.value());
-      break;
     case ExecutionMode::StreamingInterfaceINTEL:
       words.push_back((uint32_t)param.streamingInterfaceINTEL);
       break;
@@ -1490,7 +1460,6 @@ inline uint16_t ExtraWordCount(const ExecutionMode executionMode)
     case ExecutionMode::NumSIMDWorkitemsINTEL: return 1;
     case ExecutionMode::SchedulerTargetFmaxMhzINTEL: return 1;
     case ExecutionMode::FPFastMathDefault: return 2;
-    case ExecutionMode::OpacityMicromapIdKHR: return 1;
     case ExecutionMode::StreamingInterfaceINTEL: return 1;
     case ExecutionMode::RegisterMapInterfaceINTEL: return 1;
     case ExecutionMode::NamedBarrierCountINTEL: return 1;
@@ -3128,11 +3097,6 @@ inline TensorAddressingOperandsAndParamDatas DecodeParam(const ConstIter &it, ui
     ret.decodeFunc = Id::fromWord(it.word(word));
     word += 1;
   }
-  if(ret.flags & TensorAddressingOperands::DecodeVectorFunc)
-  {
-    ret.decodeVectorFunc = Id::fromWord(it.word(word));
-    word += 1;
-  }
   return ret;
 }
 
@@ -3147,10 +3111,6 @@ inline void EncodeParam(rdcarray<uint32_t> &words, const TensorAddressingOperand
   {
     words.push_back(param.decodeFunc.value());
   }
-  if(param.flags & TensorAddressingOperands::DecodeVectorFunc)
-  {
-    words.push_back(param.decodeVectorFunc.value());
-  }
 }
 
 inline uint16_t ExtraWordCount(const TensorAddressingOperands tensorAddressingOperands)
@@ -3159,7 +3119,6 @@ inline uint16_t ExtraWordCount(const TensorAddressingOperands tensorAddressingOp
   {
     case TensorAddressingOperands::TensorView: return 1;
     case TensorAddressingOperands::DecodeFunc: return 1;
-    case TensorAddressingOperands::DecodeVectorFunc: return 1;
     default: break;
   }
   return 0;
@@ -3180,8 +3139,6 @@ inline uint16_t OptionalWordCount(const FPEncoding val) { return val != FPEncodi
 inline uint16_t OptionalWordCount(const CooperativeVectorMatrixLayout val) { return val != CooperativeVectorMatrixLayout::Invalid ? 1 : 0; }
 
 inline uint16_t OptionalWordCount(const ComponentType val) { return val != ComponentType::Invalid ? 1 : 0; }
-
-inline uint16_t OptionalWordCount(const GatherModes val) { return val != GatherModes::Invalid ? 1 : 0; }
 
 template<>
 inline TensorOperandsAndParamDatas DecodeParam(const ConstIter &it, uint32_t &word)
@@ -14041,32 +13998,6 @@ struct OpTypeGraphARM
   rdcarray<Id> inOutTypes;
 };
 
-struct OpBitcastExtractEXT
-{
-  OpBitcastExtractEXT(const ConstIter &it)
-  {
-    memcpy(this, it.words(), sizeof(*this));
-  }
-  OpBitcastExtractEXT(IdResultType resultType, IdResult result, Id base, Id offset)
-      : op(Op::BitcastExtractEXT)
-      , wordCount(FixedWordSize)
-  {
-    this->resultType = resultType;
-    this->result = result;
-    this->base = base;
-    this->offset = offset;
-  }
-
-  static constexpr Op OpCode = Op::BitcastExtractEXT;
-  static constexpr uint16_t FixedWordSize = 5U;
-  Op op;
-  uint16_t wordCount;
-  IdResultType resultType;
-  IdResult result;
-  Id base;
-  Id offset;
-};
-
 struct OpTerminateInvocation
 {
   OpTerminateInvocation(const ConstIter &it)
@@ -15942,60 +15873,6 @@ struct OpExtractSubArrayQCOM
   Id index;
 };
 
-struct OpImageGatherQCOM
-{
-  OpImageGatherQCOM(const ConstIter &it)
-  {
-    uint32_t word = 0;(void)word;
-    this->op = OpCode;
-    this->wordCount = (uint16_t)it.size();
-    this->resultType = Id::fromWord(it.word(1));
-    this->result = Id::fromWord(it.word(2));
-    this->sampledImage = Id::fromWord(it.word(3));
-    this->coordinate = Id::fromWord(it.word(4));
-    this->component = Id::fromWord(it.word(5));
-    this->mode = Id::fromWord(it.word(6));
-    word = 7;
-    this->imageOperands = DecodeParam<ImageOperandsAndParamDatas>(it, word);
-  }
-  OpImageGatherQCOM(IdResultType resultType, IdResult result, Id sampledImage, Id coordinate, Id component, Id mode, ImageOperandsAndParamDatas imageOperands = ImageOperands::None)
-      : op(Op::ImageGatherQCOM)
-      , wordCount(MinWordSize + ExtraWordCount(imageOperands))
-  {
-    this->resultType = resultType;
-    this->result = result;
-    this->sampledImage = sampledImage;
-    this->coordinate = coordinate;
-    this->component = component;
-    this->mode = mode;
-    this->imageOperands = imageOperands;
-  }
-  operator Operation() const
-  {
-    rdcarray<uint32_t> words;
-    words.push_back(resultType.value());
-    words.push_back(result.value());
-    words.push_back(sampledImage.value());
-    words.push_back(coordinate.value());
-    words.push_back(component.value());
-    words.push_back(mode.value());
-    EncodeParam(words, imageOperands);
-    return Operation(OpCode, words);
-  }
-
-  static constexpr Op OpCode = Op::ImageGatherQCOM;
-  static constexpr uint16_t MinWordSize = 7U;
-  Op op;
-  uint16_t wordCount;
-  IdResultType resultType;
-  IdResult result;
-  Id sampledImage;
-  Id coordinate;
-  Id component;
-  Id mode;
-  ImageOperandsAndParamDatas imageOperands;
-};
-
 struct OpGroupIAddNonUniformAMD
 {
   OpGroupIAddNonUniformAMD(const ConstIter &it)
@@ -16604,28 +16481,6 @@ struct OpBufferPointerEXT
   Id buffer;
 };
 
-struct OpAbortKHR
-{
-  OpAbortKHR(const ConstIter &it)
-  {
-    memcpy(this, it.words(), sizeof(*this));
-  }
-  OpAbortKHR(Id messageType, Id message)
-      : op(Op::AbortKHR)
-      , wordCount(FixedWordSize)
-  {
-    this->messageType = messageType;
-    this->message = message;
-  }
-
-  static constexpr Op OpCode = Op::AbortKHR;
-  static constexpr uint16_t FixedWordSize = 3U;
-  Op op;
-  uint16_t wordCount;
-  Id messageType;
-  Id message;
-};
-
 struct OpUntypedImageTexelPointerEXT
 {
   OpUntypedImageTexelPointerEXT(const ConstIter &it)
@@ -16716,134 +16571,6 @@ struct OpConstantSizeOfEXT
   IdResultType resultType;
   IdResult result;
   Id type;
-};
-
-struct OpConstantDataKHR
-{
-  OpConstantDataKHR(const ConstIter &it)
-  {
-    uint32_t word = 0;(void)word;
-    this->op = OpCode;
-    this->wordCount = (uint16_t)it.size();
-    this->resultType = Id::fromWord(it.word(1));
-    this->result = Id::fromWord(it.word(2));
-    word = 3;
-    this->data = MultiParam<uint32_t>(it, word);
-  }
-  OpConstantDataKHR(IdResultType resultType, IdResult result, const rdcarray<uint32_t> &data = {})
-      : op(Op::ConstantDataKHR)
-      , wordCount(MinWordSize + MultiWordCount(data))
-  {
-    this->resultType = resultType;
-    this->result = result;
-    this->data = data;
-  }
-  operator Operation() const
-  {
-    rdcarray<uint32_t> words;
-    words.push_back(resultType.value());
-    words.push_back(result.value());
-    for(size_t i=0; i < data.size(); i++)
-    {
-      words.push_back((uint32_t)data[i]);
-    }
-    return Operation(OpCode, words);
-  }
-
-  static constexpr Op OpCode = Op::ConstantDataKHR;
-  static constexpr uint16_t MinWordSize = 3U;
-  Op op;
-  uint16_t wordCount;
-  IdResultType resultType;
-  IdResult result;
-  rdcarray<uint32_t> data;
-};
-
-struct OpSpecConstantDataKHR
-{
-  OpSpecConstantDataKHR(const ConstIter &it)
-  {
-    uint32_t word = 0;(void)word;
-    this->op = OpCode;
-    this->wordCount = (uint16_t)it.size();
-    this->resultType = Id::fromWord(it.word(1));
-    this->result = Id::fromWord(it.word(2));
-    word = 3;
-    this->data = MultiParam<uint32_t>(it, word);
-  }
-  OpSpecConstantDataKHR(IdResultType resultType, IdResult result, const rdcarray<uint32_t> &data = {})
-      : op(Op::SpecConstantDataKHR)
-      , wordCount(MinWordSize + MultiWordCount(data))
-  {
-    this->resultType = resultType;
-    this->result = result;
-    this->data = data;
-  }
-  operator Operation() const
-  {
-    rdcarray<uint32_t> words;
-    words.push_back(resultType.value());
-    words.push_back(result.value());
-    for(size_t i=0; i < data.size(); i++)
-    {
-      words.push_back((uint32_t)data[i]);
-    }
-    return Operation(OpCode, words);
-  }
-
-  static constexpr Op OpCode = Op::SpecConstantDataKHR;
-  static constexpr uint16_t MinWordSize = 3U;
-  Op op;
-  uint16_t wordCount;
-  IdResultType resultType;
-  IdResult result;
-  rdcarray<uint32_t> data;
-};
-
-struct OpPoisonKHR
-{
-  OpPoisonKHR(const ConstIter &it)
-  {
-    memcpy(this, it.words(), sizeof(*this));
-  }
-  OpPoisonKHR(IdResultType resultType, IdResult result)
-      : op(Op::PoisonKHR)
-      , wordCount(FixedWordSize)
-  {
-    this->resultType = resultType;
-    this->result = result;
-  }
-
-  static constexpr Op OpCode = Op::PoisonKHR;
-  static constexpr uint16_t FixedWordSize = 3U;
-  Op op;
-  uint16_t wordCount;
-  IdResultType resultType;
-  IdResult result;
-};
-
-struct OpFreezeKHR
-{
-  OpFreezeKHR(const ConstIter &it)
-  {
-    memcpy(this, it.words(), sizeof(*this));
-  }
-  OpFreezeKHR(IdResultType resultType, IdResult result, Id value)
-      : op(Op::FreezeKHR)
-      , wordCount(FixedWordSize)
-  {
-    this->resultType = resultType;
-    this->result = result;
-    this->value = value;
-  }
-
-  static constexpr Op OpCode = Op::FreezeKHR;
-  static constexpr uint16_t FixedWordSize = 4U;
-  Op op;
-  uint16_t wordCount;
-  IdResultType resultType;
-  IdResult result;
-  Id value;
 };
 
 struct OpHitObjectRecordHitMotionNV
@@ -18392,47 +18119,26 @@ struct OpHitObjectRecordFromQueryEXT
 {
   OpHitObjectRecordFromQueryEXT(const ConstIter &it)
   {
-    uint32_t word = 0;(void)word;
-    this->op = OpCode;
-    this->wordCount = (uint16_t)it.size();
-    this->hitObject = Id::fromWord(it.word(1));
-    this->rayQuery = Id::fromWord(it.word(2));
-    this->sBTRecordIndex = Id::fromWord(it.word(3));
-    this->hitObjectAttributes = Id::fromWord(it.word(4));
-    this->hitKind = (it.size() > 5) ? Id::fromWord(it.word(5)) : Id();
+    memcpy(this, it.words(), sizeof(*this));
   }
-  OpHitObjectRecordFromQueryEXT(Id hitObject, Id rayQuery, Id sBTRecordIndex, Id hitObjectAttributes, Id hitKind = Id())
+  OpHitObjectRecordFromQueryEXT(Id hitObject, Id rayQuery, Id sBTRecordIndex, Id hitObjectAttributes)
       : op(Op::HitObjectRecordFromQueryEXT)
-      , wordCount(MinWordSize + OptionalWordCount(hitKind))
+      , wordCount(FixedWordSize)
   {
     this->hitObject = hitObject;
     this->rayQuery = rayQuery;
     this->sBTRecordIndex = sBTRecordIndex;
     this->hitObjectAttributes = hitObjectAttributes;
-    this->hitKind = hitKind;
-  }
-  operator Operation() const
-  {
-    rdcarray<uint32_t> words;
-    words.push_back(hitObject.value());
-    words.push_back(rayQuery.value());
-    words.push_back(sBTRecordIndex.value());
-    words.push_back(hitObjectAttributes.value());
-    if(hitKind != Id()) words.push_back(hitKind.value());
-    return Operation(OpCode, words);
   }
 
   static constexpr Op OpCode = Op::HitObjectRecordFromQueryEXT;
-  static constexpr uint16_t MinWordSize = 5U;
+  static constexpr uint16_t FixedWordSize = 5U;
   Op op;
   uint16_t wordCount;
   Id hitObject;
   Id rayQuery;
   Id sBTRecordIndex;
   Id hitObjectAttributes;
-  Id hitKind;
-
-  bool HasHitKind() const { return wordCount > 5; }
 };
 
 struct OpHitObjectRecordMissEXT
@@ -22717,18 +22423,24 @@ struct OpCompositeConstructContinuedINTEL
     uint32_t word = 0;(void)word;
     this->op = OpCode;
     this->wordCount = (uint16_t)it.size();
-    word = 1;
+    this->resultType = Id::fromWord(it.word(1));
+    this->result = Id::fromWord(it.word(2));
+    word = 3;
     this->constituents = MultiParam<Id>(it, word);
   }
-  OpCompositeConstructContinuedINTEL(const rdcarray<Id> &constituents = {})
+  OpCompositeConstructContinuedINTEL(IdResultType resultType, IdResult result, const rdcarray<Id> &constituents = {})
       : op(Op::CompositeConstructContinuedINTEL)
       , wordCount(MinWordSize + MultiWordCount(constituents))
   {
+    this->resultType = resultType;
+    this->result = result;
     this->constituents = constituents;
   }
   operator Operation() const
   {
     rdcarray<uint32_t> words;
+    words.push_back(resultType.value());
+    words.push_back(result.value());
     for(size_t i=0; i < constituents.size(); i++)
     {
       words.push_back(constituents[i].value());
@@ -22737,9 +22449,11 @@ struct OpCompositeConstructContinuedINTEL
   }
 
   static constexpr Op OpCode = Op::CompositeConstructContinuedINTEL;
-  static constexpr uint16_t MinWordSize = 1U;
+  static constexpr uint16_t MinWordSize = 3U;
   Op op;
   uint16_t wordCount;
+  IdResultType resultType;
+  IdResult result;
   rdcarray<Id> constituents;
 };
 
@@ -22791,14 +22505,14 @@ struct OpConvertBF16ToFINTEL
   Id bFloat16Value;
 };
 
-struct OpControlBarrierArriveEXT
+struct OpControlBarrierArriveINTEL
 {
-  OpControlBarrierArriveEXT(const ConstIter &it)
+  OpControlBarrierArriveINTEL(const ConstIter &it)
   {
     memcpy(this, it.words(), sizeof(*this));
   }
-  OpControlBarrierArriveEXT(IdScope execution, IdScope memory, IdMemorySemantics semantics)
-      : op(Op::ControlBarrierArriveEXT)
+  OpControlBarrierArriveINTEL(IdScope execution, IdScope memory, IdMemorySemantics semantics)
+      : op(Op::ControlBarrierArriveINTEL)
       , wordCount(FixedWordSize)
   {
     this->execution = execution;
@@ -22806,7 +22520,7 @@ struct OpControlBarrierArriveEXT
     this->semantics = semantics;
   }
 
-  static constexpr Op OpCode = Op::ControlBarrierArriveEXT;
+  static constexpr Op OpCode = Op::ControlBarrierArriveINTEL;
   static constexpr uint16_t FixedWordSize = 4U;
   Op op;
   uint16_t wordCount;
@@ -22815,14 +22529,14 @@ struct OpControlBarrierArriveEXT
   IdMemorySemantics semantics;
 };
 
-struct OpControlBarrierWaitEXT
+struct OpControlBarrierWaitINTEL
 {
-  OpControlBarrierWaitEXT(const ConstIter &it)
+  OpControlBarrierWaitINTEL(const ConstIter &it)
   {
     memcpy(this, it.words(), sizeof(*this));
   }
-  OpControlBarrierWaitEXT(IdScope execution, IdScope memory, IdMemorySemantics semantics)
-      : op(Op::ControlBarrierWaitEXT)
+  OpControlBarrierWaitINTEL(IdScope execution, IdScope memory, IdMemorySemantics semantics)
+      : op(Op::ControlBarrierWaitINTEL)
       , wordCount(FixedWordSize)
   {
     this->execution = execution;
@@ -22830,7 +22544,7 @@ struct OpControlBarrierWaitEXT
     this->semantics = semantics;
   }
 
-  static constexpr Op OpCode = Op::ControlBarrierWaitEXT;
+  static constexpr Op OpCode = Op::ControlBarrierWaitINTEL;
   static constexpr uint16_t FixedWordSize = 4U;
   Op op;
   uint16_t wordCount;
@@ -23462,98 +23176,6 @@ struct OpConditionalCopyObjectINTEL
   rdcarray<Id> conditional_arguments;
 };
 
-struct OpPredicatedLoadINTEL
-{
-  OpPredicatedLoadINTEL(const ConstIter &it)
-  {
-    uint32_t word = 0;(void)word;
-    this->op = OpCode;
-    this->wordCount = (uint16_t)it.size();
-    this->resultType = Id::fromWord(it.word(1));
-    this->result = Id::fromWord(it.word(2));
-    this->pointer = Id::fromWord(it.word(3));
-    this->predicate = Id::fromWord(it.word(4));
-    this->defaultValue = Id::fromWord(it.word(5));
-    word = 6;
-    this->memoryAccess = DecodeParam<MemoryAccessAndParamDatas>(it, word);
-  }
-  OpPredicatedLoadINTEL(IdResultType resultType, IdResult result, Id pointer, Id predicate, Id defaultValue, MemoryAccessAndParamDatas memoryAccess = MemoryAccess::None)
-      : op(Op::PredicatedLoadINTEL)
-      , wordCount(MinWordSize + ExtraWordCount(memoryAccess))
-  {
-    this->resultType = resultType;
-    this->result = result;
-    this->pointer = pointer;
-    this->predicate = predicate;
-    this->defaultValue = defaultValue;
-    this->memoryAccess = memoryAccess;
-  }
-  operator Operation() const
-  {
-    rdcarray<uint32_t> words;
-    words.push_back(resultType.value());
-    words.push_back(result.value());
-    words.push_back(pointer.value());
-    words.push_back(predicate.value());
-    words.push_back(defaultValue.value());
-    EncodeParam(words, memoryAccess);
-    return Operation(OpCode, words);
-  }
-
-  static constexpr Op OpCode = Op::PredicatedLoadINTEL;
-  static constexpr uint16_t MinWordSize = 6U;
-  Op op;
-  uint16_t wordCount;
-  IdResultType resultType;
-  IdResult result;
-  Id pointer;
-  Id predicate;
-  Id defaultValue;
-  MemoryAccessAndParamDatas memoryAccess;
-};
-
-struct OpPredicatedStoreINTEL
-{
-  OpPredicatedStoreINTEL(const ConstIter &it)
-  {
-    uint32_t word = 0;(void)word;
-    this->op = OpCode;
-    this->wordCount = (uint16_t)it.size();
-    this->pointer = Id::fromWord(it.word(1));
-    this->object = Id::fromWord(it.word(2));
-    this->predicate = Id::fromWord(it.word(3));
-    word = 4;
-    this->memoryAccess = DecodeParam<MemoryAccessAndParamDatas>(it, word);
-  }
-  OpPredicatedStoreINTEL(Id pointer, Id object, Id predicate, MemoryAccessAndParamDatas memoryAccess = MemoryAccess::None)
-      : op(Op::PredicatedStoreINTEL)
-      , wordCount(MinWordSize + ExtraWordCount(memoryAccess))
-  {
-    this->pointer = pointer;
-    this->object = object;
-    this->predicate = predicate;
-    this->memoryAccess = memoryAccess;
-  }
-  operator Operation() const
-  {
-    rdcarray<uint32_t> words;
-    words.push_back(pointer.value());
-    words.push_back(object.value());
-    words.push_back(predicate.value());
-    EncodeParam(words, memoryAccess);
-    return Operation(OpCode, words);
-  }
-
-  static constexpr Op OpCode = Op::PredicatedStoreINTEL;
-  static constexpr uint16_t MinWordSize = 4U;
-  Op op;
-  uint16_t wordCount;
-  Id pointer;
-  Id object;
-  Id predicate;
-  MemoryAccessAndParamDatas memoryAccess;
-};
-
 struct OpGroupIMulKHR
 {
   OpGroupIMulKHR(const ConstIter &it)
@@ -23928,90 +23550,6 @@ struct OpConvertHandleToSampledImageINTEL
   IdResultType resultType;
   IdResult result;
   Id operand;
-};
-
-struct OpFDot2MixAcc32VALVE
-{
-  OpFDot2MixAcc32VALVE(const ConstIter &it)
-  {
-    memcpy(this, it.words(), sizeof(*this));
-  }
-  OpFDot2MixAcc32VALVE(IdResultType resultType, IdResult result, Id vector1, Id vector2, Id accumulator)
-      : op(Op::FDot2MixAcc32VALVE)
-      , wordCount(FixedWordSize)
-  {
-    this->resultType = resultType;
-    this->result = result;
-    this->vector1 = vector1;
-    this->vector2 = vector2;
-    this->accumulator = accumulator;
-  }
-
-  static constexpr Op OpCode = Op::FDot2MixAcc32VALVE;
-  static constexpr uint16_t FixedWordSize = 6U;
-  Op op;
-  uint16_t wordCount;
-  IdResultType resultType;
-  IdResult result;
-  Id vector1;
-  Id vector2;
-  Id accumulator;
-};
-
-struct OpFDot2MixAcc16VALVE
-{
-  OpFDot2MixAcc16VALVE(const ConstIter &it)
-  {
-    memcpy(this, it.words(), sizeof(*this));
-  }
-  OpFDot2MixAcc16VALVE(IdResultType resultType, IdResult result, Id vector1, Id vector2, Id accumulator)
-      : op(Op::FDot2MixAcc16VALVE)
-      , wordCount(FixedWordSize)
-  {
-    this->resultType = resultType;
-    this->result = result;
-    this->vector1 = vector1;
-    this->vector2 = vector2;
-    this->accumulator = accumulator;
-  }
-
-  static constexpr Op OpCode = Op::FDot2MixAcc16VALVE;
-  static constexpr uint16_t FixedWordSize = 6U;
-  Op op;
-  uint16_t wordCount;
-  IdResultType resultType;
-  IdResult result;
-  Id vector1;
-  Id vector2;
-  Id accumulator;
-};
-
-struct OpFDot4MixAcc32VALVE
-{
-  OpFDot4MixAcc32VALVE(const ConstIter &it)
-  {
-    memcpy(this, it.words(), sizeof(*this));
-  }
-  OpFDot4MixAcc32VALVE(IdResultType resultType, IdResult result, Id vector1, Id vector2, Id accumulator)
-      : op(Op::FDot4MixAcc32VALVE)
-      , wordCount(FixedWordSize)
-  {
-    this->resultType = resultType;
-    this->result = result;
-    this->vector1 = vector1;
-    this->vector2 = vector2;
-    this->accumulator = accumulator;
-  }
-
-  static constexpr Op OpCode = Op::FDot4MixAcc32VALVE;
-  static constexpr uint16_t FixedWordSize = 6U;
-  Op op;
-  uint16_t wordCount;
-  IdResultType resultType;
-  IdResult result;
-  Id vector1;
-  Id vector2;
-  Id accumulator;
 };
 
 template<typename T>

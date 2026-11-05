@@ -28,7 +28,7 @@
 #include "Code/Interface/QRDInterface.h"
 #include "ui_AnalyticsPromptDialog.h"
 
-AnalyticsPromptDialog::AnalyticsPromptDialog(PersistentConfig &cfg, QWidget *parent)
+AnalyticsPromptDialog::AnalyticsPromptDialog(PersistantConfig &cfg, QWidget *parent)
     : QDialog(parent), ui(new Ui::AnalyticsPromptDialog), m_Config(cfg)
 {
   ui->setupUi(this);

@@ -433,10 +433,6 @@ bool VkInitParams::IsSupportedVersion(uint64_t ver)
   if(ver == CurrentVersion)
     return true;
 
-  // 0x19 -> 0x20 - converted serialised page table to be 64-bit
-  if(ver == 0x19)
-    return true;
-
   // 0x18 -> 0x19 - added serialised annotations
   if(ver == 0x18)
     return true;
@@ -526,14 +522,10 @@ void SanitiseOldImageLayout(VkImageLayout &layout)
   // we can't transition to PREINITIALIZED, so instead use GENERAL. This allows host access so we
   // can still replay maps of the image's memory. In theory we can still transition from
   // PREINITIALIZED on replay, but consider that we need to be able to reset layouts and suddenly we
-  // have a problem transitioning from PREINITIALIZED more than once.
-  // We lose the PREINITIALIZED layout when initial contents are first applied, and from then on
-  // play pretend and leave it in GENERAL.
+  // have a problem transitioning from PREINITIALIZED more than once - so for that reason we
+  // instantly promote any images that are PREINITIALIZED to GENERAL at the start of the frame
+  // capture, and from then on treat it as the same
   if(layout == VK_IMAGE_LAYOUT_PREINITIALIZED)
-    layout = VK_IMAGE_LAYOUT_GENERAL;
-
-  // same applies to ZERO_INITIALIZED
-  if(layout == VK_IMAGE_LAYOUT_ZERO_INITIALIZED_EXT)
     layout = VK_IMAGE_LAYOUT_GENERAL;
 }
 
@@ -1043,8 +1035,6 @@ rdcstr HumanDriverName(VkDriverId driverId)
     case VK_DRIVER_ID_MESA_HONEYKRISP: return "Mesa Honeykrisp";
     case VK_DRIVER_ID_VULKAN_SC_EMULATION_ON_VULKAN: return "Vulkan SC Emulation on Vulkan";
     case VK_DRIVER_ID_MESA_KOSMICKRISP: return "Mesa Kosmickrisp";
-    case VK_DRIVER_ID_MESA_GFXSTREAM: return "Mesa gfxstream";
-    case VK_DRIVER_ID_APE_SOFT: return "Ape Vulkan ICD";
     case VK_DRIVER_ID_MAX_ENUM: break;
   }
 
@@ -1341,42 +1331,28 @@ VkDriverInfo::VkDriverInfo(const VkPhysicalDeviceProperties &physProps,
     // happening in a way that was easy to notice. In this version NV applied a optimisation
     // to not re-set static pipeline state when a renderpass was begun, which was previously
     // hiding the issue by conservatively re-setting the state.
-    // This was likely fixed much earlier than version 591, but it wasn't checked before then (and
-    // the workaround is very cheap)
-    if(Major() > 532 && Major() < 591)
+    if(Major() > 532)
     {
       if(active)
-        RDCLOG(
-            "Enabling NV workaround for static pipeline force-bind to preserve state - update to a "
-            "newer driver for fix");
+        RDCLOG("Enabling NV workaround for static pipeline force-bind to preserve state");
       nvidiaStaticPipelineRebindStates = true;
     }
 
 #if ENABLED(RDOC_WIN32)
-    // this is fixed in a windows version but we can't easily query that, but there is a
-    // driver-based workaround. Before this version we apply the workaround ourselves
-    if(Major() < 591)
-    {
-      if(active)
-        RDCLOG(
-            "Enabling NV workaround for unaligned BDA memory capture/replay - update to a "
-            "newer driver for fix");
-      nvidiaUnalignedBDAIssue = true;
-    }
+    // this is fixed in a windows version but we can't easily query that, so instead we are waiting
+    // for a driver-based workaround and apply the workaround ourselves in the meantime
+    if(active)
+      RDCLOG("Enabling NV workaround for unaligned BDA memory capture/replay");
+    nvidiaUnalignedBDAIssue = true;
 #endif
 
     // this was found in the initial implementation, if mesh output is fetched and a user descriptor
     // set has no vertex bindings at all (and they're not also compute bindings) then a descriptor
     // set layout devoid of any compute bindings being bound causes problems. To fix this we set one
     // binding visible to all stages in every descriptor set layout.
-    if(Major() < 591)
-    {
-      if(active)
-        RDCLOG(
-            "Enabling NV workaround for descriptor buffers to preserve compute bindings - update "
-            "to a newer driver for fix");
-      nvidiaDescriptorBufferExtraBinding = true;
-    }
+    if(active)
+      RDCLOG("Enabling NV workaround for descriptor buffers to preserve compute bindings");
+    nvidiaDescriptorBufferExtraBinding = true;
   }
 
   if(driverProps.driverID == VK_DRIVER_ID_AMD_PROPRIETARY ||
@@ -1448,7 +1424,6 @@ VkDriverInfo::VkDriverInfo(const VkPhysicalDeviceProperties &physProps,
     // not fixed yet that I know of, or unknown driver with fixes
     qualcommDrefNon2DCompileCrash = true;
     qualcommLineWidthCrash = true;
-    qualcommBrokenOpaqueCaptureAddress = true;
 
     // KHR_buffer_device_address has been tested on 622 (Quest2)
     // UBO dynamic offset leak has been fixed in early 2020, 622 tested.
@@ -1466,7 +1441,8 @@ VkDriverInfo::VkDriverInfo(const VkPhysicalDeviceProperties &physProps,
       if(active)
         RDCLOG(
             "Using host acceleration structure deserialisation commands on Mali - update to a "
-            "newer driver for fix");
+            "newer "
+            "driver for fix");
       maliBrokenASDeviceSerialisation = true;
     }
   }

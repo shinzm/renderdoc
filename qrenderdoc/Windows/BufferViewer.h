@@ -40,7 +40,6 @@ class RDSpinBox64;
 class QItemSelection;
 class QMenu;
 class QPushButton;
-class QTimer;
 class QVBoxLayout;
 class RDLabel;
 class RDTableView;
@@ -147,8 +146,6 @@ private slots:
   void on_axisMappingCombo_currentIndexChanged(int index);
   void on_axisMappingButton_clicked();
   void on_setFormat_toggled(bool checked);
-  void on_filterCBuffer_toggled(bool checked);
-  void on_filterCaseSensitive_toggled(bool checked);
   void on_resetMeshFilterButton_clicked();
   void on_camParameters_clicked();
   void on_guessButton_clicked();
@@ -216,9 +213,9 @@ private:
 
   void UI_AddTaskPayloads(RDTreeWidgetItem *root, size_t baseOffset,
                           const rdcarray<ShaderConstant> &consts, BufferData *buffer);
-  bool UI_AddFixedVariables(RDTreeWidgetItem *root, uint32_t baseOffset,
+  void UI_AddFixedVariables(RDTreeWidgetItem *root, uint32_t baseOffset,
                             const rdcarray<ShaderConstant> &consts,
-                            const rdcarray<ShaderVariable> &vars, bool ignoreFilter);
+                            const rdcarray<ShaderVariable> &vars);
   void UI_RemoveOffsets(RDTreeWidgetItem *root);
   void UI_FixedAddMatrixRows(RDTreeWidgetItem *n, const ShaderConstant &c, const ShaderVariable &v);
 
@@ -341,8 +338,6 @@ private:
   QAction *m_FilterMesh = NULL;
   QAction *m_RemoveFilter = NULL;
   QAction *m_GotoTask = NULL;
-
-  QTimer *m_FilterTimeout = NULL;
 
   RDSpinBox64 *byteRangeStart = NULL;
   RDSpinBox64 *byteRangeLength = NULL;

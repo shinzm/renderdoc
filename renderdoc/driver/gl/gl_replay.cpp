@@ -106,8 +106,7 @@ IReplayDriver *GLReplay::MakeDummyDriver()
     shaders.push_back(it->second.StealReflection());
   }
 
-  IReplayDriver *dummy = new DummyDriver(this, shaders, m_pDriver->DetachStructuredFile(),
-                                         m_pDriver->DetachAnnotations());
+  IReplayDriver *dummy = new DummyDriver(this, shaders, m_pDriver->DetachStructuredFile());
 
   return dummy;
 }
@@ -143,9 +142,9 @@ rdcarray<uint32_t> GLReplay::GetPassEvents(uint32_t eventId)
   const ActionDescription *action = m_pDriver->GetAction(eventId);
 
   const ActionDescription *start = action;
-  while(start && start->previousAction && !(start->previousAction->flags & ActionFlags::Clear))
+  while(start && start->previous && !(start->previous->flags & ActionFlags::Clear))
   {
-    const ActionDescription *prev = start->previousAction;
+    const ActionDescription *prev = start->previous;
 
     if(start->outputs != prev->outputs || start->depthOut != prev->depthOut)
       break;
@@ -161,7 +160,7 @@ rdcarray<uint32_t> GLReplay::GetPassEvents(uint32_t eventId)
     if(start->flags & ActionFlags::Drawcall)
       passEvents.push_back(start->eventId);
 
-    start = start->nextAction;
+    start = start->next;
   }
 
   return passEvents;
@@ -1884,14 +1883,6 @@ void GLReplay::SavePipelineState(uint32_t eventId)
       pipe.framebuffer.drawFBO.readBuffer = b - eGL_COLOR_ATTACHMENT0;
     else
       pipe.framebuffer.drawFBO.readBuffer = -1;
-
-    if(HasExt[ARB_framebuffer_no_attachments])
-    {
-      drv.glGetFramebufferParameteriv(eGL_READ_FRAMEBUFFER, eGL_FRAMEBUFFER_DEFAULT_SAMPLES,
-                                      (GLint *)&pipe.framebuffer.readFBO.defaultSampleCount);
-      drv.glGetFramebufferParameteriv(eGL_DRAW_FRAMEBUFFER, eGL_FRAMEBUFFER_DEFAULT_SAMPLES,
-                                      (GLint *)&pipe.framebuffer.drawFBO.defaultSampleCount);
-    }
   }
 
   pipe.framebuffer.blendState.blendFactor = rs.BlendColor;
@@ -2385,8 +2376,7 @@ rdcarray<SamplerDescriptor> GLReplay::GetSamplerDescriptors(ResourceId descripto
       // GL has separate sampler objects but they don't exist as separate sampler descriptors
       ret[dst].type = DescriptorType::ImageSampler;
 
-      if(target != eGL_TEXTURE_2D_MULTISAMPLE && target != eGL_TEXTURE_2D_MULTISAMPLE_ARRAY &&
-         target != eGL_TEXTURE_BUFFER)
+      if(target != eGL_TEXTURE_2D_MULTISAMPLE && target != eGL_TEXTURE_2D_MULTISAMPLE_ARRAY)
       {
         if(samp != 0)
           drv.glGetSamplerParameterfv(samp, eGL_TEXTURE_BORDER_COLOR,
@@ -3621,8 +3611,8 @@ ResourceId GLReplay::ApplyCustomShader(TextureDisplay &display)
   disp.linearDisplayAsGamma = false;
   disp.subresource = display.subresource;
   disp.overlay = DebugOverlay::NoOverlay;
-  disp.rangeMin = display.rangeMin;
-  disp.rangeMax = display.rangeMax;
+  disp.rangeMin = 0.0f;
+  disp.rangeMax = 1.0f;
   disp.rawOutput = false;
   disp.scale = 1.0f;
 

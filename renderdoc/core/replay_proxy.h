@@ -59,7 +59,6 @@ enum ReplayProxyPacket
   eReplayProxy_GetBuffer,
   eReplayProxy_GetShaderEntryPoints,
   eReplayProxy_GetShader,
-  eReplayProxy_GetShaderReflectionByPointer,
   eReplayProxy_GetDebugMessages,
 
   eReplayProxy_GetBufferData,
@@ -532,8 +531,6 @@ public:
   IMPLEMENT_FUNCTION_PROXIED(rdcarray<ShaderEntryPoint>, GetShaderEntryPoints, ResourceId shader);
   IMPLEMENT_FUNCTION_PROXIED(const ShaderReflection *, GetShader, ResourceId pipeline, ResourceId,
                              ShaderEntryPoint entry);
-  IMPLEMENT_FUNCTION_PROXIED(const ShaderReflection *, GetShaderReflectionByPointer,
-                             uint64_t reflectionPointer);
 
   IMPLEMENT_FUNCTION_PROXIED(rdcarray<rdcstr>, GetDisassemblyTargets, bool withPipeline);
   IMPLEMENT_FUNCTION_PROXIED(rdcstr, DisassembleShader, ResourceId pipeline,
@@ -680,8 +677,6 @@ private:
   };
 
   std::map<ShaderReflKey, const ShaderReflection *> m_ShaderReflectionCache;
-
-  std::map<uint64_t, const ShaderReflection *> m_PointerReflectionCache;
 
   // reader from the other side of the host <-> remote connection
   ReadSerialiser &m_Reader;

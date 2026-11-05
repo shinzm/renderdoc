@@ -136,7 +136,7 @@ struct VersionCommand : public Command
   virtual bool Parse(cmdline::parser &, GlobalEnvironment &) { return true; }
   virtual int Execute(const CaptureOptions &)
   {
-    std::cout << "renderdoccmd " << (sizeof(uintptr_t) == sizeof(uint64_t) ? "x64" : "x86")
+    std::cout << "rendertestcmd " << (sizeof(uintptr_t) == sizeof(uint64_t) ? "x64" : "x86")
               << " v" MAJOR_MINOR_VERSION_STRING << " built from " << RENDERDOC_GetCommitHash()
               << std::endl;
 
@@ -846,7 +846,7 @@ public:
   virtual void AddOptions(cmdline::parser &parser)
   {
     parser.set_footer(
-#if PYTHON_AVAILABLE == 1
+#if PYTHON_VERSION_MINOR > 0
         "<unit|functional>"
 #else
         "<unit>"
@@ -876,7 +876,7 @@ public:
     rest.erase(rest.begin());
 
     if(mode != "unit"
-#if PYTHON_AVAILABLE == 1
+#if PYTHON_VERSION_MINOR > 0
        && mode != "functional"
 #endif
     )
@@ -898,9 +898,9 @@ public:
   {
     if(mode == "unit")
       return RENDERDOC_RunUnitTests("renderdoccmd test unit", args);
-#if PYTHON_AVAILABLE == 1
+#if PYTHON_VERSION_MINOR > 0
     else if(mode == "functional")
-      return RENDERDOC_RunFunctionalTests(args);
+      return RENDERDOC_RunFunctionalTests(PYTHON_VERSION_MINOR, args);
 #endif
 
     std::cerr << "Unsupported test frame work '" << mode << "'" << std::endl << std::endl;
@@ -1657,6 +1657,7 @@ int renderdoccmd(GlobalEnvironment &env, std::vector<std::string> &argv)
     cmd.parse_check(argv, true);
 
     CaptureOptions opts;
+    RENDERDOC_GetDefaultCaptureOptions(&opts);
 
     if(it->second->IsCaptureCommand())
     {

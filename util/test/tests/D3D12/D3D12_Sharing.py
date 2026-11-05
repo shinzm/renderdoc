@@ -1,3 +1,4 @@
+import renderdoc as rd
 import rdtest
 
 
@@ -9,11 +10,11 @@ class D3D12_Sharing(rdtest.TestCase):
         for marker in markers:
             action = self.find_action(marker)
 
-            action = action.nextAction
+            action: rd.ActionDescription = action.next
 
-            self.set_event(action.eventId, False)
+            self.controller.SetFrameEvent(action.eventId, False)
 
-            pipe = self.controller.GetPipelineState()
+            pipe: rd.PipeState = self.controller.GetPipelineState()
 
             rdtest.log.print(f"Checking Event: {marker}")
             draw = marker == "Draw"

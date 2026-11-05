@@ -1,5 +1,3 @@
-from typing import List, Tuple
-
 import renderdoc as rd
 import struct
 import rdtest
@@ -7,11 +5,10 @@ import rdtest
 # Not a real test, re-used by API-specific tests
 class Subgroup_Zoo(rdtest.TestCase):
     internal = True
-    slow_test = True
     demos_test_name = None
     workgroup = (0, 0, 0)
 
-    def check_compute_thread_result(self, test: int, action: rd.ActionDescription, x: int, y: int, z: int, dim: Tuple[int,int,int], bufdata: bytes):
+    def check_compute_thread_result(self, test, action, x, y, z, dim, bufdata):
         try:
             real = struct.unpack_from(
                 "4f", bufdata, 16*y*dim[0] + 16*x)
@@ -20,40 +17,46 @@ class Subgroup_Zoo(rdtest.TestCase):
             return False
 
         try:
-            with self.debug_thread(self.workgroup, (x, y, z)) as debug:
-                _, variables = self.process_trace(debug.trace)
+            trace = self.controller.DebugThread(self.workgroup, (x, y, z))
 
-                # Find the source variable 'testResult' at the highest instruction index
-                name = 'testResult'
-                debugged = None
-                countInst = len(debug.trace.instInfo)
-                for inst in range(countInst):
-                    sourceVars = debug.trace.instInfo[countInst-1-inst].sourceVars
-                    try:
-                        dataVars = [v for v in sourceVars if v.name == name]
-                        if len(dataVars) == 0:
-                            continue
-                        debugged = self.evaluate_source_var(dataVars[0], variables)
-                    except KeyError as ex:
+            _, variables = self.process_trace(trace)
+
+            if trace.debugger is None:
+                raise rdtest.TestFailureException(f"Test {test} at {action.eventId} got no debug result at {x},{y},{z}")
+
+            # Find the source variable 'testResult' at the highest instruction index
+            name = 'testResult'
+            debugged = None
+            countInst = len(trace.instInfo)
+            for inst in range(countInst):
+                sourceVars = trace.instInfo[countInst-1-inst].sourceVars
+                try:
+                    dataVars = [v for v in sourceVars if v.name == name]
+                    if len(dataVars) == 0:
                         continue
-                    except rdtest.TestFailureException as ex:
-                        continue
-                    break
-                if debugged is None:
-                    raise rdtest.TestFailureException(f"Couldn't find source variable {name} at {x},{y},{z}")
+                    debugged = self.evaluate_source_var(dataVars[0], variables)
+                except KeyError as ex:
+                    continue
+                except rdtest.TestFailureException as ex:
+                    continue
+                break
+            if debugged is None:
+                raise rdtest.TestFailureException(f"Couldn't find source variable {name} at {x},{y},{z}")
 
-                debuggedValue = list(debugged.value.f32v[0:4])
+            debuggedValue = list(debugged.value.f32v[0:4])
 
-                if not rdtest.value_compare(real, debuggedValue, eps=5.0E-06):
-                    raise rdtest.TestFailureException(f"EID:{action.eventId} TID:{x},{y},{z} debugged thread value {debuggedValue} does not match output {real}")
+            if not rdtest.value_compare(real, debuggedValue, eps=5.0E-06):
+                raise rdtest.TestFailureException(f"EID:{action.eventId} TID:{x},{y},{z} debugged thread value {debuggedValue} does not match output {real}")
 
         except rdtest.TestFailureException as ex:
             rdtest.log.error(f"Test {test} failed {ex}")
             return False
+        finally:
+            self.controller.FreeTrace(trace)
 
         return True
 
-    def check_compute_tests(self, compute_dims: List[rd.ActionDescription], thread_checks: List[int]):
+    def check_compute_tests(self, compute_dims, thread_checks):
         overallFailed = False
         for comp_dim in compute_dims:
             rdtest.log.begin_section(
@@ -64,7 +67,7 @@ class Subgroup_Zoo(rdtest.TestCase):
 
             for test, action in enumerate(compute_tests):
                 failed = False
-                self.set_event(action.eventId, False)
+                self.controller.SetFrameEvent(action.eventId, False)
 
                 pipe = self.controller.GetPipelineState()
                 csrefl = pipe.GetShaderReflection(rd.ShaderStage.Compute)
@@ -79,8 +82,7 @@ class Subgroup_Zoo(rdtest.TestCase):
 
                 # each test writes up to 16k data, one vec4 per thread * up to 1024 threads
                 bufdata = self.controller.GetBufferData(
-                    rw[0].descriptor.resource, test * 16 * 1024, 16 * 1024
-                )
+                    rw[0].descriptor.resource, test*16*1024, 16*1024)
 
                 for t in thread_checks:
                     xrange = 1
@@ -140,7 +142,7 @@ class Subgroup_Zoo(rdtest.TestCase):
         overallFailed = False
         for idx, action in enumerate(graphics_tests):
             failed = False
-            self.set_event(action.eventId, False)
+            self.controller.SetFrameEvent(action.eventId, False)
 
             pipe = self.controller.GetPipelineState()
 
@@ -149,14 +151,48 @@ class Subgroup_Zoo(rdtest.TestCase):
                 for view in range(pipe.MultiviewBroadcastCount()):
 
                     postvs = self.get_postvs(
-                        action, rd.MeshDataStage.VSOut, first_index=0, num_indices=action.numIndices, instance=inst, view = view)
+                        action, rd.MeshDataStage.VSOut, first_index=0, num_indices=action.numIndices, instance=inst)
 
                     for vtx in range(action.numIndices):
-                        success, err = self.check_vertex_debug(vtx, idx, inst, postvs, fatal=False)
-                        if not success:
+                        trace = self.controller.DebugVertex(
+                            vtx, inst, vtx, view)
+
+                        if trace.debugger is None:
+                            self.controller.FreeTrace(trace)
+
+                            rdtest.log.error(
+                                f"Test {idx} at {action.eventId} got no debug result at {vtx} inst {inst} view {view}")
                             failed = True
-                            rdtest.log.error(f"Test {idx} at {action.eventId}: {err}")
                             continue
+
+                        _, variables = self.process_trace(trace)
+
+                        for var in trace.sourceVars:
+                            if var.name == 'vertdata':
+                                name = var.name
+
+                                if var.name not in postvs[vtx].keys():
+                                    rdtest.log.error(
+                                        f"Don't have expected output for {var.name}")
+                                    failed = True
+                                    continue
+
+                                real = postvs[vtx][name]
+                                debugged = self.evaluate_source_var(
+                                    var, variables)
+
+                                if debugged.columns != 4 or len(real) != 4:
+                                    rdtest.log.error(
+                                        f"Vertex output is not the right size ({len(real)} vs {debugged.columns})")
+                                    failed = True
+                                    continue
+
+                                if not rdtest.value_compare(real, debugged.value.f32v[0:4], eps=5.0E-06):
+                                    rdtest.log.error(
+                                        f"Test {idx} at {action.eventId} debugged vertex value {debugged.value.f32v[0:4]} at {vtx} instance {inst} view {view} does not match output {real}")
+                                    failed = True
+
+                        self.controller.FreeTrace(trace)
 
             # check some assorted pixel outputs
             target = pipe.GetOutputTargets()[0].resource
@@ -165,9 +201,8 @@ class Subgroup_Zoo(rdtest.TestCase):
                 for view in range(pipe.MultiviewBroadcastCount()):
                     x, y = pixel
 
-                    picked = self.pick_pixel(
-                        target, x, y, rd.Subresource(0, 0, 0), rd.CompType.Float
-                    )
+                    picked = self.controller.PickPixel(
+                        target, x, y, rd.Subresource(0, 0, 0), rd.CompType.Float)
 
                     real = picked.floatValue
 
@@ -179,20 +214,36 @@ class Subgroup_Zoo(rdtest.TestCase):
                     inputs.sample = 0
                     inputs.primitive = rd.ReplayController.NoPreference
                     inputs.view = view
-                    with self.debug_pixel(x, y, inputs) as debug:
-                        _, variables = self.process_trace(debug.trace)
+                    trace = self.controller.DebugPixel(x, y, inputs)
 
-                        output_sourcevar = self.find_output_source_var(
-                            debug.trace, rd.ShaderBuiltin.ColorOutput, 0)
+                    if trace.debugger is None:
+                        self.controller.FreeTrace(trace)
+                        rdtest.log.error(
+                            f"Test {idx} at {action.eventId} got no debug result at {x},{y}")
+                        failed = True
+                        continue
 
-                        debugged = self.evaluate_source_var(output_sourcevar, variables)
+                    _, variables = self.process_trace(trace)
 
-                        debuggedValue = list(debugged.value.f32v[0:4])
+                    output_sourcevar = self.find_output_source_var(
+                        trace, rd.ShaderBuiltin.ColorOutput, 0)
 
-                        if not rdtest.value_compare(real, debuggedValue, eps=5.0E-06):
-                            rdtest.log.error(
-                                f"Test {idx} at {action.eventId} debugged pixel value {debuggedValue} at {x},{y} in {view} does not match output {real}")
-                            failed = True
+                    if output_sourcevar is None:
+                        rdtest.log.error("No output variable found")
+                        failed = True
+                        continue
+
+                    debugged = self.evaluate_source_var(
+                        output_sourcevar, variables)
+
+                    self.controller.FreeTrace(trace)
+
+                    debuggedValue = list(debugged.value.f32v[0:4])
+
+                    if not rdtest.value_compare(real, debuggedValue, eps=5.0E-06):
+                        rdtest.log.error(
+                            f"Test {idx} at {action.eventId} debugged pixel value {debuggedValue} at {x},{y} in {view} does not match output {real}")
+                        failed = True
 
             overallFailed |= failed
             if not failed:
@@ -220,5 +271,7 @@ class Subgroup_Zoo(rdtest.TestCase):
 
         if overallFailed:
             raise rdtest.TestFailureException("Some tests were not as expected")
+
+        self.check_renderdoc_log_asserts()
 
         rdtest.log.success("All tests matched")

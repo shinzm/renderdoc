@@ -320,7 +320,7 @@ EntryPointInterface::ResourceBase::ResourceBase(ResourceClass resourceClass, con
     srv.shape = getival<ResourceKind>(md->children[(size_t)ResField::SRVShape]);
     srv.sampleCount = getival<uint32_t>(md->children[(size_t)ResField::SRVSampleCount]);
     srv.compType = ComponentType::Invalid;
-    srv.elementStride = (srv.shape == DXIL::ResourceKind::RawBuffer) ? 1 : ~0U;
+    srv.elementStride = ~0U;
     const Metadata *tags = md->children[(size_t)ResField::SRVTags];
     for(size_t t = 0; tags && t < tags->children.size(); t += 2)
     {
@@ -348,7 +348,7 @@ EntryPointInterface::ResourceBase::ResourceBase(ResourceClass resourceClass, con
     uav.rasterizerOrderedView =
         (getival<uint32_t>(md->children[(size_t)ResField::UAVRasterOrder]) == 1);
     uav.compType = ComponentType::Invalid;
-    uav.elementStride = (uav.shape == DXIL::ResourceKind::RawBuffer) ? 1 : ~0U;
+    uav.elementStride = ~0U;
     uav.samplerFeedback = SamplerFeedbackType::LastEntry;
     uav.atomic64Use = false;
 
@@ -1663,7 +1663,7 @@ DXBC::Reflection *Program::BuildReflection()
       }
     }
     if(!Files.empty())
-      m_SourceInfo = true;
+      m_CompileFlags.flags.push_back({"preferSourceDebug", "1"});
   }
 
   if(dx.source.args && dx.source.args->children.size() == 1)
@@ -1875,7 +1875,7 @@ rdcstr Program::GetDebugStatus()
               case DXOp::TextureGatherRaw:
                 // Gather raw elements from 4 texels with no type conversions (SRV type is constrained)
 
-              // SM 6.8
+              // SM 6.8 : when SM6.8 is supporting by RenderDoc
               case DXOp::StartVertexLocation:
                 // SV_BaseVertexLocation
                 // BaseVertexLocation from DrawIndexedInstanced or StartVertexLocation from DrawInstanced
@@ -1884,10 +1884,6 @@ rdcstr Program::GetDebugStatus()
                 // StartInstanceLocation from Draw*Instanced
               case DXOp::BarrierByMemoryType:
               case DXOp::BarrierByMemoryHandle:
-
-              // SM 6.9 - could be used with normal vectors
-              case DXOp::RawBufferVectorLoad:
-              case DXOp::RawBufferVectorStore:
 
               // No plans to implement
 
@@ -1915,11 +1911,6 @@ rdcstr Program::GetDebugStatus()
               case DXOp::TempRegStore:
               case DXOp::MinPrecXRegLoad:
               case DXOp::MinPrecXRegStore:
-
-              // long vectors
-              case DXOp::VectorReduceAnd:
-              case DXOp::VectorReduceOr:
-              case DXOp::FDot:
 
               // Mesh Shaders
               case DXOp::SetMeshOutputCounts:
@@ -2014,35 +2005,6 @@ rdcstr Program::GetDebugStatus()
               case DXOp::RayQuery_CandidateInstanceContributionToHitGroupIndex:
               case DXOp::RayQuery_CommittedInstanceContributionToHitGroupIndex:
               case DXOp::GeometryIndex:
-              case DXOp::AllocateRayQuery2:
-              case DXOp::HitObject_TraceRay:
-              case DXOp::HitObject_FromRayQuery:
-              case DXOp::HitObject_FromRayQueryWithAttrs:
-              case DXOp::HitObject_MakeMiss:
-              case DXOp::HitObject_MakeNop:
-              case DXOp::HitObject_Invoke:
-              case DXOp::MaybeReorderThread:
-              case DXOp::HitObject_IsMiss:
-              case DXOp::HitObject_IsHit:
-              case DXOp::HitObject_IsNop:
-              case DXOp::HitObject_RayFlags:
-              case DXOp::HitObject_RayTMin:
-              case DXOp::HitObject_RayTCurrent:
-              case DXOp::HitObject_WorldRayOrigin:
-              case DXOp::HitObject_WorldRayDirection:
-              case DXOp::HitObject_ObjectRayOrigin:
-              case DXOp::HitObject_ObjectRayDirection:
-              case DXOp::HitObject_ObjectToWorld3x4:
-              case DXOp::HitObject_WorldToObject3x4:
-              case DXOp::HitObject_GeometryIndex:
-              case DXOp::HitObject_InstanceIndex:
-              case DXOp::HitObject_InstanceID:
-              case DXOp::HitObject_PrimitiveIndex:
-              case DXOp::HitObject_HitKind:
-              case DXOp::HitObject_ShaderTableIndex:
-              case DXOp::HitObject_SetShaderTableIndex:
-              case DXOp::HitObject_LoadLocalRootTableConstant:
-              case DXOp::HitObject_Attributes:
 
               // Workgraphs
               case DXOp::AllocateNodeOutputRecords:
@@ -2090,12 +2052,8 @@ rdcstr Program::GetDebugStatus()
     }
   }
 
-  rdcstr ret;
-#if ENABLED(DXC_COMPATIBLE_DISASM)
-  ret = "DXIL debugging disabled when DXC_COMPATIBLE_DISASM is enabled";
-#endif
   // no unsupported instructions used
-  return ret;
+  return rdcstr();
 }
 
 void Program::GetLineInfo(size_t instruction, uintptr_t offset, LineColumnInfo &lineInfo) const

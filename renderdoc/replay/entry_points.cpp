@@ -377,6 +377,11 @@ RENDERDOC_ExecuteAndInject(const rdcstr &app, const rdcstr &workingDir, const rd
   return ret;
 }
 
+extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_GetDefaultCaptureOptions(CaptureOptions *opts)
+{
+  *opts = CaptureOptions();
+}
+
 extern "C" RENDERDOC_API ResultDetails RENDERDOC_CC RENDERDOC_StartGlobalHook(
     const rdcstr &pathmatch, const rdcstr &capturefile, const CaptureOptions &opts)
 {
@@ -886,7 +891,8 @@ static void TestPrintMsg(const rdcstr &msg)
   OSUtility::WriteOutput(OSUtility::Output_StdErr, msg.c_str());
 }
 
-extern "C" RENDERDOC_API int RENDERDOC_CC RENDERDOC_RunFunctionalTests(const rdcarray<rdcstr> &args)
+extern "C" RENDERDOC_API int RENDERDOC_CC RENDERDOC_RunFunctionalTests(int pythonMinorVersion,
+                                                                       const rdcarray<rdcstr> &args)
 {
 #if ENABLED(RDOC_WIN32)
   const char *moduledir = "/pymodules";
@@ -923,26 +929,6 @@ extern "C" RENDERDOC_API int RENDERDOC_CC RENDERDOC_RunFunctionalTests(const rdc
   if(!FileIO::exists(moduleFilename))
   {
     TestPrintMsg(StringFormat::Fmt("Couldn't locate python module at %s\n", moduleFilename.c_str()));
-    return 1;
-  }
-
-  void *moduleHandle = Process::LoadModule(moduleFilename);
-
-  int pythonMinorVersion = 0;
-
-  if(moduleHandle)
-  {
-    typedef int (*PFN_rd_python_minor_version)();
-
-    PFN_rd_python_minor_version py_ver_minor =
-        (PFN_rd_python_minor_version)Process::GetFunctionAddress(moduleHandle,
-                                                                 "_rd_python_minor_version");
-
-    pythonMinorVersion = py_ver_minor();
-  }
-  else
-  {
-    TestPrintMsg(StringFormat::Fmt("Couldn't load python module at %s\n", moduleFilename.c_str()));
     return 1;
   }
 
@@ -1012,6 +998,8 @@ extern "C" RENDERDOC_API int RENDERDOC_CC RENDERDOC_RunFunctionalTests(const rdc
                          // specify python module path
                          L"--pyrenderdoc",
                          StringFormat::UTF82Wide(modulePath),
+                         // force in-process as we can't fork out to python to pass args
+                         L"--in-process",
                      });
 
   rdcarray<wchar_t *> wideArgStrings;

@@ -32,11 +32,7 @@
 #include "rdcarray.h"
 #include "replay_enums.h"
 
-DOCUMENT(R"(
-TaskGroupSize()
-TaskGroupSize(other: TaskGroupSize)
-
-The size information for a task group.
+DOCUMENT(R"(The size information for a task group.
 )");
 struct TaskGroupSize
 {
@@ -72,11 +68,7 @@ struct TaskGroupSize
 
 DECLARE_REFLECTION_STRUCT(TaskGroupSize);
 
-DOCUMENT(R"(
-MeshletSize()
-MeshletSize(other: MeshletSize)
-
-The size information for a meshlet.
+DOCUMENT(R"(The size information for a meshlet.
 )");
 struct MeshletSize
 {
@@ -109,11 +101,7 @@ of indices.
 
 DECLARE_REFLECTION_STRUCT(MeshletSize);
 
-DOCUMENT(R"(
-MeshFormat()
-MeshFormat(other: MeshFormat)
-
-Contains the details of a single element of data (such as position or texture
+DOCUMENT(R"(Contains the details of a single element of data (such as position or texture
 co-ordinates) within a mesh.
 )");
 struct MeshFormat
@@ -127,7 +115,7 @@ struct MeshFormat
 :type: ResourceId
 )");
   ResourceId indexResourceId;
-  DOCUMENT(R"(The offset in bytes where the indices start in :data:`indexResourceId`.
+  DOCUMENT(R"(The offset in bytes where the indices start in idxbuf.
 
 :type: int
 )");
@@ -326,11 +314,8 @@ DECLARE_REFLECTION_STRUCT(MeshFormat);
 struct ICamera;
 
 DOCUMENT(R"(
-MeshDisplay()
-MeshDisplay(other: MeshDisplay)
-
 Describes how to render a mesh preview of one or more meshes. Describes the camera configuration as
-well as what options to use when rendering both the current mesh, and any other auxiliary meshes.
+well as what options to use when rendering both the current mesh, and any other auxilliary meshes.
 
 .. data:: NoHighlight
 
@@ -462,9 +447,6 @@ struct MeshDisplay
 DECLARE_REFLECTION_STRUCT(MeshDisplay);
 
 DOCUMENT(R"(
-TextureDisplay()
-TextureDisplay(other: TextureDisplay)
-
 Describes how to render a texture preview of an image. Describes the zoom and pan settings for the
 texture when rendering on a particular output, as well as the modification and selection of a
 particular subresource (such as array slice, mip or multi-sampled sample).
@@ -477,7 +459,7 @@ particular subresource (such as array slice, mip or multi-sampled sample).
 
 .. data:: ResolveSamples
 
-  Value for :data:`Subresource.sample` if the samples should be averaged.
+  Value for :data:`sampleIdx` if the samples should be averaged.
 )");
 struct TextureDisplay
 {
@@ -639,12 +621,7 @@ If set to (0, 0, 0, 0) the global checkerboard colors are used.
 DECLARE_REFLECTION_STRUCT(TextureDisplay);
 
 // some dependent structs for TextureSave
-DOCUMENT(R"(
-TextureComponentMapping()
-TextureComponentMapping(other: TextureComponentMapping)
-
-How to map components to normalised ``[0, 255]`` for saving to 8-bit file formats.
-)");
+DOCUMENT("How to map components to normalised ``[0, 255]`` for saving to 8-bit file formats.");
 struct TextureComponentMapping
 {
   DOCUMENT("");
@@ -666,11 +643,7 @@ struct TextureComponentMapping
 
 DECLARE_REFLECTION_STRUCT(TextureComponentMapping);
 
-DOCUMENT(R"(
-TextureSampleMapping()
-TextureSampleMapping(other: TextureSampleMapping)
-
-How to map multisampled textures for saving to non-multisampled file formats.
+DOCUMENT(R"(How to map multisampled textures for saving to non-multisampled file formats.
 
 .. data:: ResolveSamples
 
@@ -707,11 +680,7 @@ normal 2D image. If set to :data:`ResolveSamples` then instead there's a default
 
 DECLARE_REFLECTION_STRUCT(TextureSampleMapping);
 
-DOCUMENT(R"(
-TextureSliceMapping()
-TextureSliceMapping(other: TextureSliceMapping)
-
-How to map array textures for saving to non-arrayed file formats.
+DOCUMENT(R"(How to map array textures for saving to non-arrayed file formats.
 
 If :data:`sliceIndex` is -1, :data:`cubeCruciform` == :data:`slicesAsGrid` == ``False`` and the file
 format doesn't support saving all slices, only slice 0 is saved.
@@ -771,12 +740,7 @@ With the gaps filled in with transparent black.
 
 DECLARE_REFLECTION_STRUCT(TextureSliceMapping);
 
-DOCUMENT(R"(
-TextureSave()
-TextureSave(other: TextureSave)
-
-Describes a texture to save and how to map it to the destination file format.
-)");
+DOCUMENT("Describes a texture to save and how to map it to the destination file format.");
 struct TextureSave
 {
   DOCUMENT("");
@@ -870,13 +834,7 @@ It is an :class:`AlphaMapping` that controls what behaviour to use.
 
 DECLARE_REFLECTION_STRUCT(TextureSave);
 
-DOCUMENT(R"(
-DescriptorRange()
-DescriptorRange(other: DescriptorRange)
-DescriptorRange(access: DescriptorAccess)
-
-A range of sized descriptors.
-)");
+DOCUMENT("A range of sized descriptors.");
 struct DescriptorRange
 {
   DOCUMENT("");
@@ -935,12 +893,7 @@ struct DescriptorRange
 DECLARE_REFLECTION_STRUCT(DescriptorRange);
 
 // dependent structs for TargetControlMessage
-DOCUMENT(R"(
-NewCaptureData()
-NewCaptureData(other: NewCaptureData)
-
-Information about the a new capture created by the target.
-)");
+DOCUMENT("Information about the a new capture created by the target.");
 struct NewCaptureData
 {
   DOCUMENT("");
@@ -1010,12 +963,7 @@ struct NewCaptureData
 
 DECLARE_REFLECTION_STRUCT(NewCaptureData);
 
-DOCUMENT(R"(
-APIUseData()
-APIUseData(other: APIUseData)
-
-Information about the API that the target is using.
-)");
+DOCUMENT("Information about the API that the target is using.");
 struct APIUseData
 {
   DOCUMENT("");
@@ -1050,12 +998,7 @@ struct APIUseData
 
 DECLARE_REFLECTION_STRUCT(APIUseData);
 
-DOCUMENT(R"(
-BusyData()
-BusyData(other: BusyData)
-
-Information about why the target is busy.
-)");
+DOCUMENT("Information about why the target is busy.");
 struct BusyData
 {
   DOCUMENT("");
@@ -1072,12 +1015,7 @@ struct BusyData
 
 DECLARE_REFLECTION_STRUCT(BusyData);
 
-DOCUMENT(R"(
-NewChildData()
-NewChildData(other: NewChildData)
-
-Information about a new child process spawned by the target.
-)");
+DOCUMENT("Information about a new child process spawned by the target.");
 struct NewChildData
 {
   DOCUMENT("");
@@ -1099,12 +1037,7 @@ struct NewChildData
 
 DECLARE_REFLECTION_STRUCT(NewChildData);
 
-DOCUMENT(R"(
-TargetControlMessage()
-TargetControlMessage(other: TargetControlMessage)
-
-A message from a target control connection.
-)");
+DOCUMENT("A message from a target control connection.");
 struct TargetControlMessage
 {
   DOCUMENT("");
@@ -1160,13 +1093,7 @@ or has finished, it will be -1.0
 
 DECLARE_REFLECTION_STRUCT(TargetControlMessage);
 
-DOCUMENT(R"(
-EnvironmentModification()
-EnvironmentModification(other: EnvironmentModification)
-EnvironmentModification(mod: EnvMod, sep: EnvSep, name: str, value: str)
-
-A modification to a single environment variable.
-)");
+DOCUMENT("A modification to a single environment variable.");
 struct EnvironmentModification
 {
   DOCUMENT("");
@@ -1218,12 +1145,7 @@ struct EnvironmentModification
 
 DECLARE_REFLECTION_STRUCT(EnvironmentModification);
 
-DOCUMENT(R"(
-CaptureFileFormat()
-CaptureFileFormat(other: CaptureFileFormat)
-
-The format for a capture file either supported to read from, or export to.
-)");
+DOCUMENT("The format for a capture file either supported to read from, or export to");
 struct CaptureFileFormat
 {
   DOCUMENT("");
@@ -1295,12 +1217,7 @@ structured data.
 
 DECLARE_REFLECTION_STRUCT(CaptureFileFormat);
 
-DOCUMENT(R"(
-GPUDevice()
-GPUDevice(other: GPUDevice)
-
-Describes a single GPU at replay time.
-)");
+DOCUMENT("Describes a single GPU at replay time.");
 struct GPUDevice
 {
   DOCUMENT("");
@@ -1328,7 +1245,7 @@ struct GPUDevice
 :type: GPUVendor
 )");
   GPUVendor vendor = GPUVendor::Unknown;
-  DOCUMENT(R"(The PCI device ID of this GPU.
+  DOCUMENT(R"(The PCI deviceID of this GPU.
 
 :type: int
 )");
@@ -1354,12 +1271,7 @@ struct GPUDevice
 
 DECLARE_REFLECTION_STRUCT(GPUDevice);
 
-DOCUMENT(R"(
-ReplayOptions()
-ReplayOptions(other: ReplayOptions)
-
-The options controlling how replay of a capture should be performed.
-)");
+DOCUMENT("The options controlling how replay of a capture should be performed");
 struct ReplayOptions
 {
   DOCUMENT("");
@@ -1466,12 +1378,7 @@ struct ANativeWindow;
 // for swig bindings treat the windowing data struct as completely opaque
 #if defined(SWIG)
 
-DOCUMENT(R"(
-WindowingData()
-WindowingData(other: WindowingData)
-
-An opaque structure created to hold windowing setup data
-)");
+DOCUMENT("An opaque structure created to hold windowing setup data");
 struct WindowingData
 {
 };
@@ -1529,12 +1436,7 @@ DECLARE_STRINGISE_TYPE(WindowingData);
 
 #endif
 
-DOCUMENT(R"(
-GlobalEnvironment()
-GlobalEnvironment(other: GlobalEnvironment)
-
-Structure used for initialising environment in a replay application.
-)");
+DOCUMENT(R"(Structure used for initialising environment in a replay application.)");
 struct GlobalEnvironment
 {
   DOCUMENT("");
@@ -1566,11 +1468,7 @@ here.
 
 DECLARE_REFLECTION_STRUCT(GlobalEnvironment);
 
-DOCUMENT(R"(
-ResultDetails()
-ResultDetails(other: ResultDetails)
-
-A general result from an operation with optional string information for failures.
+DOCUMENT(R"(A general result from an operation with optional string information for failures.
 
 This struct can be compared directly to a :class:`ResultCode` for simple checks of status, and when
 converted to a string it includes the formatted result code and message as appropriate.
@@ -1633,12 +1531,7 @@ extra information that is available about the error.
 
 DECLARE_REFLECTION_STRUCT(ResultDetails);
 
-DOCUMENT(R"(
-ExecuteResult()
-ExecuteResult(other: ExecuteResult)
-
-The result of executing or injecting into a program.
-)")
+DOCUMENT("The result of executing or injecting into a program.")
 struct ExecuteResult
 {
   DOCUMENT("");

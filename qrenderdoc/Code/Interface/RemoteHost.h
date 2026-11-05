@@ -29,7 +29,7 @@ class RemoteHost;
 // do not include any headers here, they must all be in QRDInterface.h
 #include "QRDInterface.h"
 
-class PersistentConfig;
+class PersistantConfig;
 class ReplayManager;
 
 struct RemoteHostData;
@@ -38,13 +38,7 @@ struct RemoteHostData;
 // are unexpectedly removed (such as disconnecting an auto-populated device) these structs are
 // copied around and they have a shared locked data pointer. All accessors then lock and look up the
 // data there to fetch or modify
-DOCUMENT(R"(
-RemoteHost()
-RemoteHost(other: RemoteHost)
-RemoteHost(hostname: str)
-
-A handle for interacting with a remote server on a given host.
-)");
+DOCUMENT("A handle for interacting with a remote server on a given host.");
 class RemoteHost
 {
 public:
@@ -66,7 +60,7 @@ public:
       "Ping the host to check current status - if the server is running, connection status, etc.");
   void CheckStatus();
 
-  DOCUMENT(R"(Runs the command specified in :meth:`RunCommand`. Returns
+  DOCUMENT(R"(Runs the command specified in :data:`runCommand`. Returns
 :class:`~renderdoc.ResultDetails` which indicates success or the type of failure.
 
 :return: The result from launching the remote server.
@@ -141,7 +135,7 @@ public:
 
   DOCUMENT(R"(Create a connection to the remote server.
 
-:return: The status of opening the capture, whether success or failure, and a :class:`~renderdoc.RemoteServer`
+:return: The status of opening the capture, whether success or failure, and a :class:`RemoteServer`
   instance if it were successful
 :rtype: Tuple[renderdoc.ResultDetails, renderdoc.RemoteServer]
 )");
@@ -150,7 +144,7 @@ public:
   DOCUMENT(R"(
 :return: The :class:`~renderdoc.DeviceProtocolController` for this host, or ``None`` if no protocol
   is in use
-:rtype: Optional[renderdoc.DeviceProtocolController]
+:rtype: renderdoc.DeviceProtocolController
 )");
   IDeviceProtocolController *Protocol() const { return m_protocol; }
   DOCUMENT(R"(
@@ -169,8 +163,7 @@ public:
 :rtype: bool
 )");
   bool IsLocalhost() const { return m_hostname == "localhost"; }
-  DOCUMENT(R"(
-:return: Returns ``True`` if this host represents a valid remote host.
+  DOCUMENT(R"(Returns ``True`` if this host represents a valid remote host.
 :rtype: bool
 )");
   bool IsValid() const { return m_data && !m_hostname.isEmpty(); }
@@ -185,7 +178,7 @@ private:
   RemoteHostData *m_data = NULL;
 
   // allow config to set our data
-  friend class PersistentConfig;
+  friend class PersistantConfig;
   void SetFriendlyName(const rdcstr &name);
 
   // allow ReplayManager to call these functions to change the status. Otherwise they are read-only

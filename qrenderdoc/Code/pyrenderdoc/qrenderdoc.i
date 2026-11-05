@@ -14,24 +14,6 @@
 %}
 
 %begin %{
-
-#include <Python.h>
-
-#if PY_VERSION_HEX >= 0x030d0000
-inline PyObject *PyWeakref_GetObject_emu(PyObject *ref)
-{
-  PyObject *ret = NULL;
-  if(PyWeakref_GetRef(ref, &ret) > 0)
-    Py_DECREF(ret);
-  return ret;
-}
-#undef PyWeakref_GET_OBJECT
-#define PyWeakref_GET_OBJECT(x) PyWeakref_GetObject_emu(x)
-#endif
-
-%}
-
-%begin %{
 #undef slots
 
 #ifndef SWIG_GENERATED
@@ -114,9 +96,6 @@ TEMPLATE_FIXEDARRAY_DECLARE(rdcfixedarray);
   static int capviewer_init(PyObject *self, PyObject *args) {
     PyObject *resultobj = 0;
     ICaptureViewer *result = 0;
-    
-    if(!SWIG_Python_UnpackTuple(args, "new_CaptureViewer", 0, 0, 0))
-      return -1;
 
     result = new PythonCaptureViewer(self);
     resultobj = SWIG_NewPointerObj(SWIG_as_voidptr(result), SWIGTYPE_p_ICaptureViewer, SWIG_BUILTIN_INIT | 0);
@@ -171,10 +150,9 @@ SWIGPY_DESTRUCTOR_CLOSURE(capviewer_deinit) /* defines capviewer_deinit_destruct
 %include <stdint.i>
 
 %include "Code/Interface/QRDInterface.h"
-%include "Code/Interface/PersistentConfig.h"
+%include "Code/Interface/PersistantConfig.h"
 %include "Code/Interface/RemoteHost.h"
 %include "Code/Interface/Extensions.h"
-%include "Code/Interface/Helpers.h"
 
 DOCUMENT("");
 
@@ -185,15 +163,13 @@ TEMPLATE_ARRAY_INSTANTIATE(rdcarray, BugReport)
 TEMPLATE_ARRAY_INSTANTIATE(rdcarray, ExtensionMetadata)
 TEMPLATE_ARRAY_INSTANTIATE(rdcarray, DialogButton)
 TEMPLATE_ARRAY_INSTANTIATE(rdcarray, RemoteHost)
-TEMPLATE_ARRAY_INSTANTIATE(rdcarray, ConnectedTempCapture)
 TEMPLATE_ARRAY_INSTANTIATE_PTR(rdcarray, ICaptureViewer)
-TEMPLATE_ARRAY_INSTANTIATE(rdcarray, ParseError)
 
 // unignore the function from above
 %rename("%s") IReplayManager::BlockInvoke;
 
 %extend IReplayManager {
-  void BlockInvoke(ReplayInvokeCallback m) {
+  void BlockInvoke(InvokeCallback m) {
     PyObject *global_internal_handle = NULL;
 
     PyObject *globals = PyEval_GetGlobals();

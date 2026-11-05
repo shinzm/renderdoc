@@ -40,12 +40,6 @@
 #define NK_ASSERT(expr) TEST_ASSERT(expr, "nuklear assertion failed")
 #include "3rdparty/nuklear/nuklear.h"
 
-static void ToLower(std::string &str)
-{
-  for(char &c : str)
-    c = tolower(c);
-}
-
 #if defined(WIN32)
 
 #define NK_GDI_IMPLEMENTATION
@@ -486,13 +480,9 @@ Usage: %s Test_Name [test_options]
   bool validTestArg = false;
   if(argc >= 2)
   {
-    std::string match(argv[1]);
-    ToLower(match);
     for(const TestMetadata &test : tests)
     {
-      std::string name(test.Name);
-      ToLower(name);
-      if(name == match)
+      if(!strcmp(test.Name, argv[1]))
       {
         validTestArg = true;
         break;
@@ -683,16 +673,13 @@ Usage: %s Test_Name [test_options]
   SetUnhandledExceptionFilter(&exceptionHandler);
 #endif
 
-  ToLower(testchoice);
   for(const TestMetadata &test : tests)
   {
-    std::string name(test.Name);
-    ToLower(name);
-    if(testchoice == name)
+    if(testchoice == test.Name)
     {
       TEST_LOG("Running '%s'", test.Name);
-      test.test->SetName(test.Name);
       test.test->Prepare(argc, argv);
+      test.test->SetName(test.Name);
 
       if(!test.IsAvailable())
       {

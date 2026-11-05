@@ -1559,7 +1559,7 @@ RDResult WrappedID3D11Device::ReadLogInitialisation(RDCFile *rdc, bool storeStru
   GetReplay()->WriteFrameRecord().frameInfo.initDataSize =
       chunkInfos[(D3D11Chunk)SystemChunk::InitialContents].totalsize;
 
-  RDCDEBUG("Allocating %llu persistent bytes of memory for the log.",
+  RDCDEBUG("Allocating %llu persistant bytes of memory for the log.",
            GetReplay()->WriteFrameRecord().frameInfo.persistentSize);
 
   if(HasFatalError())
@@ -1952,7 +1952,7 @@ void WrappedID3D11Device::DestroyDeadObject(ID3D11DeviceChild *child)
       m_pImmediateContext->RemoveAnnotations(id);
 
     // clean up book-keeping
-    rm->RemoveWrapper(wrapped, wrapped->GetReal());
+    rm->RemoveWrapper(wrapped->GetReal());
     rm->ReleaseResource(id);
     D3D11ResourceRecord *record = GetResourceManager()->GetResourceRecord(id);
     if(record)

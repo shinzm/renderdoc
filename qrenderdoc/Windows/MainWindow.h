@@ -40,7 +40,6 @@ class MainWindow;
 }
 
 class RDLabel;
-class RDToolButton;
 class RDMenu;
 class LambdaThread;
 class QMimeData;
@@ -84,7 +83,6 @@ public:
   void RegisterShortcut(const rdcstr &shortcut, QWidget *widget, ShortcutCallback callback) override;
   void UnregisterShortcut(const rdcstr &shortcut, QWidget *widget) override;
   void BringToFront() override;
-  bool PromptCloseCapture() override;
 
   // ICaptureViewer
   void OnCaptureLoaded() override;
@@ -107,18 +105,20 @@ public:
   void captureModified();
   void LoadFromFilename(const QString &filename, bool temporary);
   void LoadCapture(const QString &filename, const ReplayOptions &opts, bool temporary, bool local);
+  void CloseCapture();
   QString GetSavePath(QString title = QString(), QString filter = QString());
 
   void OnCaptureTrigger(const QString &exe, const QString &workingDir, const QString &cmdLine,
                         const rdcarray<EnvironmentModification> &env, CaptureOptions opts,
-                        std::function<void(ICaptureConnection *)> callback);
+                        std::function<void(LiveCapture *)> callback);
   void OnInjectTrigger(uint32_t PID, const rdcarray<EnvironmentModification> &env,
                        const QString &name, CaptureOptions opts,
-                       std::function<void(ICaptureConnection *)> callback);
+                       std::function<void(LiveCapture *)> callback);
 
   void ShowLiveCapture(LiveCapture *live);
   void LiveCaptureClosed(LiveCapture *live);
 
+  bool PromptCloseCapture();
   bool PromptSaveCaptureAs();
   bool SaveCurrentCapture(QString saveFilename);
 
@@ -206,9 +206,6 @@ private slots:
   void networkRequestFailed(QUrl url, QString error);
   void networkRequestCompleted(QUrl url, QByteArray data);
 
-public slots:
-  void PythonStatusBarUpdate();
-
 signals:
   void networkRequestGet(QUrl url);
 
@@ -251,13 +248,9 @@ private:
 
   RDLabel *statusIcon;
   RDLabel *statusText;
-  RDToolButton *extensionStatus;
-  RDToolButton *extensionReload;
   QProgressBar *statusProgress;
   RDMenu *contextChooserMenu;
   QToolButton *contextChooser;
-
-  bool m_CurPyDebug = false;
 
   QAction *updateAction = NULL;
 

@@ -36,9 +36,6 @@ class PipelineStateViewer;
 
 class QXmlStreamWriter;
 
-class ComputeDebugSelector;
-class PixelDebugSelector;
-
 class QToolButton;
 class QMenu;
 class RDLabel;
@@ -62,7 +59,7 @@ struct ScopedTreeUpdater
   int vs;
 };
 
-class RDPreviewTooltip : public QFrame, public ICustomToolTipDisplay
+class RDPreviewTooltip : public QFrame, public ITreeViewTipDisplay
 {
 private:
   Q_OBJECT
@@ -77,8 +74,8 @@ public:
                             ICaptureContext &ctx);
 
   void hideTip();
-  QSize configureTip(QWidget *widget, QString text, QModelIndex idx);
-  void showTipAtPos(QPoint pos);
+  QSize configureTip(QWidget *widget, QModelIndex idx, QString text);
+  void showTip(QPoint pos);
   bool forceTip(QWidget *widget, QModelIndex idx);
 
 protected:
@@ -118,8 +115,6 @@ public:
 
   void SetupResourceView(RDTreeWidget *view);
 
-  void SetupDebugSelectors(QToolButton *computeSelector, QToolButton *pixelSelector);
-
   QString GetVBufferFormatString(uint32_t slot);
 
   QColor GetViewDetailsColor();
@@ -139,22 +134,11 @@ public:
 public slots:
   void shaderEdit_clicked();
 
-  void computeDebugSelector_clicked();
-  void computeDebugSelector_beginDebug(const rdcfixedarray<uint32_t, 3> &group,
-                                       const rdcfixedarray<uint32_t, 3> &thread);
-
-  void pixelDebugSelector_clicked();
-  void pixelDebugSelector_beginDebug(uint32_t x, uint32_t y, const DebugPixelInputs &inputs);
-
-
 private:
   void showEvent(QShowEvent *event) override;
 
   Ui::PipelineStateViewer *ui;
   ICaptureContext &m_Ctx;
-
-  ComputeDebugSelector *m_ComputeDebugSelector;
-  PixelDebugSelector *m_PixelDebugSelector;
 
   QMenu *editMenus[NumShaderStages] = {};
 

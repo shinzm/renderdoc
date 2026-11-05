@@ -1,3 +1,4 @@
+import renderdoc as rd
 import rdtest
 
 
@@ -6,9 +7,9 @@ class VK_Resource_Lifetimes(rdtest.TestCase):
     demos_frame_cap = 200
 
     def check_capture(self):
-        last_action = self.get_last_action()
+        last_action: rd.ActionDescription = self.get_last_action()
 
-        self.set_event(last_action.eventId, True)
+        self.controller.SetFrameEvent(last_action.eventId, True)
 
         tex = last_action.copyDestination
 
@@ -54,5 +55,5 @@ class VK_Resource_Lifetimes(rdtest.TestCase):
         # Check for resource leaks
         if len(self.controller.GetResources()) > 75:
             raise rdtest.TestFailureException(
-                f"Too many resources found: {len(self.controller.GetResources())}")
+                "Too many resources found: {}".format(len(self.controller.GetResources())))
 

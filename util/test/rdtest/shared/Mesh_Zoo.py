@@ -1,18 +1,10 @@
-from __future__ import annotations
-from typing import Callable, List, Tuple
 import renderdoc as rd
 import rdtest
-
-Region = Tuple[int,int,int,int]
-Color = Tuple[int,int,int]
-ColorList = List[Color]
-ColorCheck = Callable[[Color], bool]
-ColorListCheck = Callable[[ColorList], bool]
 
 # Not a real test, re-used by API-specific tests
 class Mesh_Zoo():
     def __init__(self):
-        self.out: rd.ReplayOutput | None = None
+        self.out = None
         self.cfg = rd.MeshDisplay()
 
     def cache_output(self):
@@ -20,7 +12,7 @@ class Mesh_Zoo():
 
         self.out.Display()
 
-        pixels = self.out.ReadbackOutputTexture()
+        pixels: bytes = self.out.ReadbackOutputTexture()
         dim = self.out.GetDimensions()
 
         pitch = dim[0]*3
@@ -28,7 +20,7 @@ class Mesh_Zoo():
 
         rdtest.png_save(rdtest.get_tmp_path('output.png'), self.rows, dim, False)
 
-    def find_action(self, name: str):
+    def find_action(self, name):
         action = None
 
         for d in self.controller.GetRootActions():
@@ -37,19 +29,18 @@ class Mesh_Zoo():
                 break
 
         if action is None:
-            raise rdtest.TestFailureException(f"Couldn't find '{name}' action")
+            raise rdtest.TestFailureException("Couldn't find '{}' action".format(name))
 
         return action
 
     # To avoid needing to do image comparisons, we instead do quad region probes to see which colours are present. That
     # way we can programmatically check that the wireframe we expect to be there, is there
-    def get_region_cols(self, region: Region):
+    def get_region_cols(self, region):
         x0, y0, x1, y1 = region
-        cols: ColorList = []
+        cols = []
         for y in range(y0, y1+1):
             for x in range(x0, x1+1):
-                px = self.rows[y][x*3:x*3+3]
-                col = (px[0], px[1], px[2])
+                col = tuple(self.rows[y][x*3:x*3+3])
 
                 # skip pure gray, this comes from the checkerboard or frustum, all our lines and data are coloured
                 if col[0] == col[1] and col[1] == col[2]:
@@ -59,37 +50,35 @@ class Mesh_Zoo():
                     cols.append(col)
         return cols
 
-    def check_region(self, region: Region, test: ColorListCheck):
+    def check_region(self, region, test):
         colors = self.get_region_cols(region)
 
         if not test(colors):
             tmp_path = rdtest.get_tmp_path('output.png')
             rdtest.png_save(tmp_path, self.rows, self.out.GetDimensions(), False)
-            raise rdtest.TestFailureException(f"Expected line segment wrong, colors: {colors}", tmp_path)
+            raise rdtest.TestFailureException("Expected line segment wrong, colors: {}".format(colors), tmp_path)
 
-    def check_vertex(self, x: int, y: int, result: rdtest.VectorValue):
+    def check_vertex(self, x, y, result):
         pick = self.out.PickVertex(x, y)
 
         if not rdtest.value_compare(result, pick):
-            raise rdtest.TestFailureException(f"When picking ({x},{y}) expected vertex {result[0]} in instance {result[1]}, but found {pick[0]} in {pick[1]}")
+            raise rdtest.TestFailureException("When picking ({},{}) expected vertex {} in instance {}, but found {} in {}".format(x, y, result[0], result[1], pick[0], pick[1]))
 
-        rdtest.log.success(f"Picking {x},{y} returns vertex {result[0]} in instance {result[1]} as expected")
+        rdtest.log.success("Picking {},{} returns vertex {} in instance {} as expected".format(x, y, result[0], result[1]))
 
-    def check_capture(self, capture_filename: str, test: rdtest.testcase.TestCase):
-        self.test = test
-        self.controller = test.controller
+    def check_capture(self, capture_filename: str, controller: rd.ReplayController):
+        self.controller = controller
 
-        self.test.set_event(self.find_action("Quad").nextAction.eventId, False)
+        self.controller.SetFrameEvent(self.find_action("Quad").next.eventId, False)
 
-        self.out = self.controller.CreateOutput(
-            rd.CreateHeadlessWindowingData(200, 200), rd.ReplayOutputType.Mesh
-        )
+        self.out: rd.ReplayOutput = self.controller.CreateOutput(rd.CreateHeadlessWindowingData(200, 200),
+                                                            rd.ReplayOutputType.Mesh)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         self.cfg = rd.MeshDisplay()
 
-        cam = rd.InitCamera(rd.CameraType.FPSLook)
+        cam: rd.Camera = rd.InitCamera(rd.CameraType.FPSLook)
 
         cam.SetPosition(0, 0, 0)
         cam.SetFPSRotation(0, 0, 0)
@@ -98,7 +87,7 @@ class Mesh_Zoo():
         self.cfg.cam = cam
 
         # Position is always first, so getting the postvs data will give us
-        inst0 = self.controller.GetPostVSData(0, 0, self.cfg.type)
+        inst0: rd.MeshFormat = self.controller.GetPostVSData(0, 0, self.cfg.type)
         self.cfg.position = inst0
 
         # after position we have float2 Color2 then float4 Color4
@@ -133,13 +122,13 @@ class Mesh_Zoo():
         self.cfg.wireframeDraw = False
 
         # allow for blending with white for the frustum
-        isred: ColorCheck = lambda col: col[0] > col[1] and col[1] == col[2]
-        isgreen: ColorCheck = lambda col: col[1] > col[0] and col[0] == col[2]
-        isblue: ColorCheck = lambda col: col[2] > col[0] and col[0] == col[1]
+        isred = lambda col: col[0] > col[1] and col[1] == col[2]
+        isgreen = lambda col: col[1] > col[0] and col[0] == col[2]
+        isblue = lambda col: col[2] > col[0] and col[0] == col[1]
 
-        isredgreen: ColorCheck = lambda col: isred(col) or isgreen(col) or col[2] == 0
+        isredgreen = lambda col: isred(col) or isgreen(col) or col[2] == 0
 
-        isyellow: ColorCheck = lambda col: col[0] == col[1] and col[2] < col[1]
+        isyellow = lambda col: col[0] == col[1] and col[2] < col[1]
 
         self.cache_output()
 
@@ -218,7 +207,7 @@ class Mesh_Zoo():
         rdtest.log.success("Rendering of float2 color secondary in instance 0 is as expected")
 
         self.cfg.highlightVert = rd.MeshDisplay.NoHighlight
-        inst1 = self.controller.GetPostVSData(1, 0, self.cfg.type)
+        inst1: rd.MeshFormat = self.controller.GetPostVSData(1, 0, self.cfg.type)
 
         self.cfg.curInstance = 1
         self.cfg.second.vertexResourceId = self.cfg.position.vertexResourceId = inst1.vertexResourceId
@@ -359,7 +348,7 @@ class Mesh_Zoo():
 
         rdtest.log.success("Both instance picking is as expected")
 
-        self.test.set_event(self.find_action("Points").nextAction.eventId, False)
+        self.controller.SetFrameEvent(self.find_action("Points").next.eventId, False)
 
         # Only one instance, just check we can see the points
         self.cfg.curInstance = 0
@@ -389,7 +378,7 @@ class Mesh_Zoo():
 
         rdtest.log.success("Point solid and lit rendering works as expected")
 
-        self.test.set_event(self.find_action("Lines").nextAction.eventId, False)
+        self.controller.SetFrameEvent(self.find_action("Lines").next.eventId, False)
 
         self.cache_output()
         self.cfg.visualisationMode = rd.Visualisation.Lit
@@ -397,7 +386,7 @@ class Mesh_Zoo():
 
         rdtest.log.success("Lines solid and lit rendering works as expected")
 
-        self.test.set_event(self.find_action("Stride 0").nextAction.eventId, False)
+        self.controller.SetFrameEvent(self.find_action("Stride 0").next.eventId, False)
 
         self.cfg.position = self.controller.GetPostVSData(0, 0, self.cfg.type)
         self.cfg.position.nearPlane = 1.0
@@ -412,7 +401,7 @@ class Mesh_Zoo():
         self.check_vertex(105, 65, (rd.ReplayOutput.NoResult, rd.ReplayOutput.NoResult))
         self.check_vertex(115, 135, (rd.ReplayOutput.NoResult, rd.ReplayOutput.NoResult))
 
-        self.test.set_event(self.find_action("Empty").nextAction.eventId, False)
+        self.controller.SetFrameEvent(self.find_action("Empty").next.eventId, False)
 
         self.cfg.position = self.controller.GetPostVSData(0, 0, self.cfg.type)
         self.cfg.position.nearPlane = 1.0

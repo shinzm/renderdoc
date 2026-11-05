@@ -1,3 +1,5 @@
+import struct
+import math
 import renderdoc as rd
 import rdtest
 
@@ -7,14 +9,14 @@ class D3D12_Parameter_Zoo(rdtest.TestCase):
 
     def check_capture(self):
         action = self.find_action("Color Draw")
-        assert action is not None
 
-        action = action.nextAction
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, False)
+        action = action.next
 
-        pipe = self.controller.GetPipelineState()
+        self.controller.SetFrameEvent(action.eventId, False)
+
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         self.check_pixel_value(pipe.GetOutputTargets()[0].resource, 0.5, 0.5, [0.0, 1.0, 0.0, 1.0])
 
@@ -22,7 +24,7 @@ class D3D12_Parameter_Zoo(rdtest.TestCase):
 
         postvs_data = self.get_postvs(action, rd.MeshDataStage.VSOut, 0, action.numIndices)
 
-        postvs_ref: rdtest.MeshReference = {
+        postvs_ref = {
             0: {
                 'vtx': 0,
                 'idx': 0,
@@ -54,9 +56,8 @@ class D3D12_Parameter_Zoo(rdtest.TestCase):
         tex.overlay = rd.DebugOverlay.Drawcall
         tex.resourceId = pipe.GetOutputTargets()[0].resource
 
-        out = self.controller.CreateOutput(
-            rd.CreateHeadlessWindowingData(100, 100), rd.ReplayOutputType.Texture
-        )
+        out: rd.ReplayOutput = self.controller.CreateOutput(rd.CreateHeadlessWindowingData(100, 100),
+                                                            rd.ReplayOutputType.Texture)
 
         out.SetTextureDisplay(tex)
 
@@ -82,45 +83,45 @@ class D3D12_Parameter_Zoo(rdtest.TestCase):
         rdtest.log.comment('desc1234: ' + desc1234.name)
 
         # filter
-        assert desc1234.GetChild(0).AsString() == 'D3D12_FILTER_ANISOTROPIC'
-        assert desc1234.GetChild(0).AsInt() == 0x55
+        self.check(desc1234.GetChild(0).AsString() == 'D3D12_FILTER_ANISOTROPIC')
+        self.check(desc1234.GetChild(0).AsInt() == 0x55)
 
         # wrapping
-        assert desc1234.GetChild(1).AsString() == 'D3D12_TEXTURE_ADDRESS_MODE_BORDER'
-        assert desc1234.GetChild(1).AsInt() == 4
+        self.check(desc1234.GetChild(1).AsString() == 'D3D12_TEXTURE_ADDRESS_MODE_BORDER')
+        self.check(desc1234.GetChild(1).AsInt() == 4)
 
         # MaxAnisotropy
-        assert desc1234.GetChild(1).AsInt() == 4
+        self.check(desc1234.GetChild(1).AsInt() == 4)
 
         # MinLod
-        assert desc1234.GetChild(8).AsFloat() == 1.5
+        self.check(desc1234.GetChild(8).AsFloat() == 1.5)
 
         rdtest.log.success("Overlay color is as expected")
 
         action = self.find_action("No Sig Draw")
-        action = action.nextAction
+        action = action.next
+        
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        self.set_event(action.eventId, False)
-
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         self.check_pixel_value(pipe.GetOutputTargets()[0].resource, 0.5, 0.5, [0.0, 1.0, 0.0, 1.0])
 
         rdtest.log.success("No sig draw worked as expected")
 
         action = self.find_action("No Sig Dispatch")
-        action = action.nextAction
-
-        self.set_event(action.eventId, False)
+        action = action.next
+        
+        self.controller.SetFrameEvent(action.eventId, False)
 
         # nothing to actually check here
 
         action = self.find_action("Temp heap Draw")
-        action = action.nextAction
+        action = action.next
+        
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        self.set_event(action.eventId, False)
-
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         self.check_pixel_value(pipe.GetOutputTargets()[0].resource, 0.5, 0.5, [0.0, 1.0, 0.0, 1.0])
 

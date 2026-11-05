@@ -6595,7 +6595,7 @@ bool WrappedID3D11DeviceContext::Serialise_GenerateMips(SerialiserType &ser,
       if(view)
       {
         m_ResourceUses[view->GetResourceResID()].push_back(
-            EventUsage(m_CurEventID, ResourceUsage::GenMips));
+            EventUsage(m_CurEventID, ResourceUsage::GenMips, view->GetResourceID()));
       }
 
       AddEvent();
@@ -6755,7 +6755,7 @@ bool WrappedID3D11DeviceContext::Serialise_ClearRenderTargetView(
       if(view)
       {
         m_ResourceUses[view->GetResourceResID()].push_back(
-            EventUsage(m_CurEventID, ResourceUsage::Clear));
+            EventUsage(m_CurEventID, ResourceUsage::Clear, view->GetResourceID()));
         action.copyDestination = view->GetResourceResID();
         D3D11_RENDER_TARGET_VIEW_DESC viewDesc;
         view->GetDesc(&viewDesc);
@@ -6837,7 +6837,7 @@ bool WrappedID3D11DeviceContext::Serialise_ClearUnorderedAccessViewUint(
       if(view)
       {
         m_ResourceUses[view->GetResourceResID()].push_back(
-            EventUsage(m_CurEventID, ResourceUsage::Clear));
+            EventUsage(m_CurEventID, ResourceUsage::Clear, view->GetResourceID()));
         action.copyDestination = view->GetResourceResID();
         action.copyDestinationSubresource = Subresource();
       }
@@ -6915,7 +6915,7 @@ bool WrappedID3D11DeviceContext::Serialise_ClearUnorderedAccessViewFloat(
       if(view)
       {
         m_ResourceUses[view->GetResourceResID()].push_back(
-            EventUsage(m_CurEventID, ResourceUsage::Clear));
+            EventUsage(m_CurEventID, ResourceUsage::Clear, view->GetResourceID()));
         action.copyDestination = view->GetResourceResID();
         action.copyDestinationSubresource = Subresource();
       }
@@ -6999,7 +6999,7 @@ bool WrappedID3D11DeviceContext::Serialise_ClearDepthStencilView(
       if(view)
       {
         m_ResourceUses[view->GetResourceResID()].push_back(
-            EventUsage(m_CurEventID, ResourceUsage::Clear));
+            EventUsage(m_CurEventID, ResourceUsage::Clear, view->GetResourceID()));
         action.copyDestination = view->GetResourceResID();
         D3D11_DEPTH_STENCIL_VIEW_DESC viewDesc;
         view->GetDesc(&viewDesc);

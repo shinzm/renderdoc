@@ -89,92 +89,61 @@ void ClampPhysDevAPIVersion(VkPhysicalDeviceProperties *pProperties, VkPhysicalD
     pProperties->apiVersion = VK_API_VERSION_1_4;
 }
 
-void WrappedVulkan::PatchStencilUsageInfo(VkImageCreateInfo *info)
-{
-  VkImageStencilUsageCreateInfo *separateStencilUsage =
-      (VkImageStencilUsageCreateInfo *)FindNextStruct(
-          info, VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO);
-  VkImageStencilUsage2CreateInfoKHR *separateStencilUsage2 =
-      (VkImageStencilUsage2CreateInfoKHR *)FindNextStruct(
-          info, VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_2_CREATE_INFO_KHR);
-  if(separateStencilUsage2)
-  {
-    separateStencilUsage2->stencilUsage |= VK_IMAGE_USAGE_SAMPLED_BIT |
-                                           VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                           VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    separateStencilUsage2->stencilUsage &= ~VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
-
-    if(info->samples != VK_SAMPLE_COUNT_1_BIT)
-    {
-      separateStencilUsage2->stencilUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    }
-  }
-  else if(separateStencilUsage)
-  {
-    separateStencilUsage->stencilUsage |= VK_IMAGE_USAGE_SAMPLED_BIT |
-                                          VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                          VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    separateStencilUsage->stencilUsage &= ~VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
-
-    if(info->samples != VK_SAMPLE_COUNT_1_BIT)
-    {
-      separateStencilUsage->stencilUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    }
-  }
-}
-
 void WrappedVulkan::PatchImageCreateInfo(VkImageCreateInfo *info, VkFormat *newViewFormatsTempMem)
 {
-  VkImageUsageFlags2KHR usage = GetImageUsageFlags(info);
-  VkImageCreateFlags2KHR flags = GetImageCreateFlags(info);
-
-  usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  info->usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
   if(IsCaptureMode(m_State))
   {
-    if(Is64BitFormat(info->format) && (IsUIntFormat(info->format) || IsSIntFormat(info->format)))
-    {
-      // 64-bit integer images are required to be supported for atomics even though applications
-      // will normally use R32G32 (D3D12 has no 64-bit type) and unfortunately these formats are not
-      // typically sample supported.
-      // Don't add the sampled usage, we will not sample these images
-    }
-    else
-    {
-      usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-    }
-
-    usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    usage &= ~VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+    info->usage |= VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    info->usage &= ~VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
   }
 
   if(IsYUVFormat(info->format))
-    flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    info->flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 
   if(info->samples != VK_SAMPLE_COUNT_1_BIT)
   {
-    usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-    flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    info->usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+    info->flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 
     if(IsCaptureMode(m_State))
     {
       if(!IsDepthOrStencilFormat(info->format))
       {
         if(GetDebugManager() && GetShaderCache()->IsBuffer2MSSupported())
-          usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+          info->usage |= VK_IMAGE_USAGE_STORAGE_BIT;
       }
       else
       {
-        usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        info->usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
       }
     }
   }
 
-  flags &= ~VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT;
+  info->flags &= ~VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT;
 
-  flags |= DefaultImageCreateFlags();
+  info->flags |= DefaultImageCreateFlags();
 
-  PatchStencilUsageInfo(info);
+  VkImageStencilUsageCreateInfo *separateStencilUsage =
+      (VkImageStencilUsageCreateInfo *)FindNextStruct(
+          info, VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO);
+  if(separateStencilUsage)
+  {
+    separateStencilUsage->stencilUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+    if(IsCaptureMode(m_State))
+    {
+      info->usage |= VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+      info->usage &= ~VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+    }
+
+    if(info->samples != VK_SAMPLE_COUNT_1_BIT)
+    {
+      separateStencilUsage->stencilUsage |=
+          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    }
+  }
 
   // similarly for the image format list for MSAA textures, add the UINT cast format we will need
   if(info->samples != VK_SAMPLE_COUNT_1_BIT)
@@ -219,9 +188,6 @@ void WrappedVulkan::PatchImageCreateInfo(VkImageCreateInfo *info, VkFormat *newV
       newViewFormatsTempMem += formatListInfo->viewFormatCount;
     }
   }
-
-  SetImageUsageFlags(info, usage);
-  SetImageCreateFlags(info, flags);
 }
 
 void WrappedVulkan::vkGetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice,
@@ -242,15 +208,6 @@ void WrappedVulkan::vkGetPhysicalDeviceFormatProperties(VkPhysicalDevice physica
   // optimalTiledFeatures must contain all these and more, so we can safely remove support for any
   // format that only includes a subset.
   uint32_t minRequiredMask = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
-
-  if(Is64BitFormat(format) && (IsUIntFormat(format) || IsSIntFormat(format)))
-  {
-    // 64-bit integer images are required to be supported for atomics even though applications will
-    // normally use R32G32 (D3D12 has no 64-bit type) and unfortunately these formats are not
-    // typically sample supported.
-    // To allow this we don't add the required sampled bit and will disable use of sampling for texture display/read
-    minRequiredMask = 0;
-  }
 
   const InstanceDeviceInfo &exts = GetExtensions(GetRecord(physicalDevice));
 
@@ -282,15 +239,6 @@ void WrappedVulkan::vkGetPhysicalDeviceFormatProperties2(VkPhysicalDevice physic
   // optimalTiledFeatures must contain all these and more, so we can safely remove support for any
   // format that only includes a subset.
   uint32_t minRequiredMask = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
-
-  if(Is64BitFormat(format) && (IsUIntFormat(format) || IsSIntFormat(format)))
-  {
-    // 64-bit integer images are required to be supported for atomics even though applications will
-    // normally use R32G32 (D3D12 has no 64-bit type) and unfortunately these formats are not
-    // typically sample supported.
-    // To allow this we don't add the required sampled bit and will disable use of sampling for texture display/read
-    minRequiredMask = 0;
-  }
 
   const InstanceDeviceInfo &exts = GetExtensions(GetRecord(physicalDevice));
 
@@ -337,24 +285,11 @@ VkResult WrappedVulkan::vkGetPhysicalDeviceImageFormatProperties(
     VkImageFormatProperties *pImageFormatProperties)
 {
   // we're going to add these usage bits implicitly on image create, so ensure we get an accurate
-  // response by adding them here. We can't do without these so regardless of anything else
-  // we simply require them even if the spec isn't currently clear on whether they're required -
-  // we assume any sensible implementation will support them.
-  usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-  if(Is64BitFormat(format) && (IsUIntFormat(format) || IsSIntFormat(format)))
-  {
-    // 64-bit integer images are required to be supported for atomics even though applications will
-    // normally use R32G32 (D3D12 has no 64-bit type) and unfortunately these formats are not
-    // typically sample supported.
-    // To allow this we don't add the required sampled bit and will disable use of sampling for texture display/read
-  }
-  else
-  {
-    // otherwise, images that are supported at all will support sampled, and any images which can't
-    // be sampled will not be required otherwise.
-    usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-  }
+  // response by adding them here. It's OK to add these, since these can't make a required format
+  // suddenly report as unsupported (all required formats must support these usages), so it can only
+  // make an optional format unsupported which is what we want.
+  usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+           VK_IMAGE_USAGE_SAMPLED_BIT;
 
   VkResult vkr =
       ObjDisp(physicalDevice)
@@ -381,31 +316,13 @@ VkResult WrappedVulkan::vkGetPhysicalDeviceImageFormatProperties2(
     VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2 *pImageFormatInfo,
     VkImageFormatProperties2 *pImageFormatProperties)
 {
-  VkPhysicalDeviceImageFormatInfo2 info = *pImageFormatInfo;
-
-  VkImageUsageFlags2KHR usage = GetImageUsageFlags(&info);
-
   // we're going to add these usage bits implicitly on image create, so ensure we get an accurate
-  // response by adding them here. We can't do without these so regardless of anything else
-  // we simply require them even if the spec isn't currently clear on whether they're required -
-  // we assume any sensible implementation will support them.
-  usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-  if(Is64BitFormat(info.format) && (IsUIntFormat(info.format) || IsSIntFormat(info.format)))
-  {
-    // 64-bit integer images are required to be supported for atomics even though applications will
-    // normally use R32G32 (D3D12 has no 64-bit type) and unfortunately these formats are not
-    // typically sample supported.
-    // To allow this we don't add the required sampled bit and will disable use of sampling for texture display/read
-  }
-  else
-  {
-    // otherwise, images that are supported at all will support sampled, and any images which can't
-    // be sampled will not be required otherwise.
-    usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-  }
-
-  SetImageUsageFlags(&info, usage);
+  // response by adding them here. It's OK to add these, since these can't make a required format
+  // suddenly report as unsupported (all required formats must support these usages), so it can only
+  // make an optional format unsupported which is what we want.
+  VkPhysicalDeviceImageFormatInfo2 info = *pImageFormatInfo;
+  info.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                VK_IMAGE_USAGE_SAMPLED_BIT;
 
   VkResult vkr = ObjDisp(physicalDevice)
                      ->GetPhysicalDeviceImageFormatProperties2(Unwrap(physicalDevice), &info,
@@ -1200,19 +1117,8 @@ VkResult WrappedVulkan::vkGetCalibratedTimestampsEXT(VkDevice device, uint32_t t
                                                      const VkCalibratedTimestampInfoKHR *pTimestampInfos,
                                                      uint64_t *pTimestamps, uint64_t *pMaxDeviation)
 {
-  size_t memSize = sizeof(VkCalibratedTimestampInfoKHR) * timestampCount;
-  for(uint32_t i = 0; i < timestampCount; i++)
-    memSize += GetNextPatchSize(&pTimestampInfos[i]);
-
-  byte *tempMem = GetTempMemory(memSize);
-  VkCalibratedTimestampInfoKHR *unwrappedInfos = (VkCalibratedTimestampInfoKHR *)tempMem;
-  tempMem += sizeof(VkCalibratedTimestampInfoKHR) * timestampCount;
-
-  for(uint32_t i = 0; i < timestampCount; i++)
-    unwrappedInfos[i] = *UnwrapStructAndChain(m_State, tempMem, &pTimestampInfos[i]);
-
-  return ObjDisp(device)->GetCalibratedTimestampsEXT(Unwrap(device), timestampCount, unwrappedInfos,
-                                                     pTimestamps, pMaxDeviation);
+  return ObjDisp(device)->GetCalibratedTimestampsEXT(Unwrap(device), timestampCount,
+                                                     pTimestampInfos, pTimestamps, pMaxDeviation);
 }
 
 VkResult WrappedVulkan::vkGetPhysicalDeviceCalibrateableTimeDomainsKHR(
@@ -1227,19 +1133,8 @@ VkResult WrappedVulkan::vkGetCalibratedTimestampsKHR(VkDevice device, uint32_t t
                                                      const VkCalibratedTimestampInfoKHR *pTimestampInfos,
                                                      uint64_t *pTimestamps, uint64_t *pMaxDeviation)
 {
-  size_t memSize = sizeof(VkCalibratedTimestampInfoKHR) * timestampCount;
-  for(uint32_t i = 0; i < timestampCount; i++)
-    memSize += GetNextPatchSize(&pTimestampInfos[i]);
-
-  byte *tempMem = GetTempMemory(memSize);
-  VkCalibratedTimestampInfoKHR *unwrappedInfos = (VkCalibratedTimestampInfoKHR *)tempMem;
-  tempMem += sizeof(VkCalibratedTimestampInfoKHR) * timestampCount;
-
-  for(uint32_t i = 0; i < timestampCount; i++)
-    unwrappedInfos[i] = *UnwrapStructAndChain(m_State, tempMem, &pTimestampInfos[i]);
-
-  return ObjDisp(device)->GetCalibratedTimestampsKHR(Unwrap(device), timestampCount, unwrappedInfos,
-                                                     pTimestamps, pMaxDeviation);
+  return ObjDisp(device)->GetCalibratedTimestampsKHR(Unwrap(device), timestampCount,
+                                                     pTimestampInfos, pTimestamps, pMaxDeviation);
 }
 
 VkDeviceAddress WrappedVulkan::vkGetBufferDeviceAddressEXT(VkDevice device,
@@ -1612,17 +1507,4 @@ VkResult WrappedVulkan::vkGetImageDrmFormatModifierPropertiesEXT(
 {
   return ObjDisp(device)->GetImageDrmFormatModifierPropertiesEXT(Unwrap(device), Unwrap(image),
                                                                  pProperties);
-}
-
-void WrappedVulkan::vkGetQueueCheckpointDataNV(VkQueue queue, uint32_t *pCheckpointDataCount,
-                                               VkCheckpointDataNV *pCheckpointData)
-{
-  return ObjDisp(queue)->GetQueueCheckpointDataNV(Unwrap(queue), pCheckpointDataCount,
-                                                  pCheckpointData);
-}
-void WrappedVulkan::vkGetQueueCheckpointData2NV(VkQueue queue, uint32_t *pCheckpointDataCount,
-                                                VkCheckpointData2NV *pCheckpointData)
-{
-  return ObjDisp(queue)->GetQueueCheckpointData2NV(Unwrap(queue), pCheckpointDataCount,
-                                                   pCheckpointData);
 }

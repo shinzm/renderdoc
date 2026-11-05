@@ -1,13 +1,15 @@
 import renderdoc as rd
+from typing import List
 import rdtest
 
 
 class GL_Shader_Debug_Zoo(rdtest.TestCase):
     demos_test_name = 'GL_Shader_Debug_Zoo'
-    slow_test = True
 
     def check_capture(self):
-        assert self.controller is not None
+        if not self.controller.GetAPIProperties().shaderDebugging:
+            rdtest.log.success("Shader debugging not enabled, skipping test")
+            return
 
         failed = False
 
@@ -23,8 +25,16 @@ class GL_Shader_Debug_Zoo(rdtest.TestCase):
 
                 x += 4
 
-                self.set_event(action.eventId, False)
-                pipe = self.controller.GetPipelineState()
+                self.controller.SetFrameEvent(action.eventId, False)
+                pipe: rd.PipeState = self.controller.GetPipelineState()
+
+                if not pipe.GetShaderReflection(rd.ShaderStage.Vertex).debugInfo.debuggable:
+                    rdtest.log.print("Skipping undebuggable shader at {} in {}.".format(test, child))
+                    return
+
+                if not pipe.GetShaderReflection(rd.ShaderStage.Pixel).debugInfo.debuggable:
+                    rdtest.log.print("Skipping undebuggable shader at {} in {}.".format(test, child))
+                    return
 
                 y = 1
 
@@ -37,23 +47,32 @@ class GL_Shader_Debug_Zoo(rdtest.TestCase):
                     inputs.primitive = 1
 
                 # Debug the shader
-                with self.debug_pixel(x, y, inputs) as debug:
-                    rdtest.log.print(f"debugging {x},{y}")
+                trace: rd.ShaderDebugTrace = self.controller.DebugPixel(x, y, inputs)
 
-                    _, variables = self.process_trace(debug.trace)
+                rdtest.log.print(f"debugging {x},{y}")
 
-                    output = self.find_output_source_var(debug.trace, rd.ShaderBuiltin.ColorOutput, 0)
+                if trace.debugger is None:
+                    failed = True
+                    rdtest.log.error("Test {} in sub-section {} did not debug pixel".format(test, child))
+                    self.controller.FreeTrace(trace)
+                    continue
 
-                    debugged = self.evaluate_source_var(output, variables)
+                _, variables = self.process_trace(trace)
 
-                    try:
-                        self.check_pixel_value(pipe.GetOutputTargets()[0].resource, x, y, debugged.value.f32v[0:4])
-                    except rdtest.TestFailureException as ex:
-                        failed = True
-                        rdtest.log.error(f"Test {test} in sub-section {child} did not match pixel. {ex!s}")
-                        continue
+                output: rd.SourceVariableMapping = self.find_output_source_var(trace, rd.ShaderBuiltin.ColorOutput, 0)
 
-                    rdtest.log.success(f"Test {test} pixel in sub-section {child} matched as expected")
+                debugged = self.evaluate_source_var(output, variables)
+
+                try:
+                    self.check_pixel_value(pipe.GetOutputTargets()[0].resource, x, y, debugged.value.f32v[0:4])
+                except rdtest.TestFailureException as ex:
+                    failed = True
+                    rdtest.log.error("Test {} in sub-section {} did not match pixel. {}".format(test, child, str(ex)))
+                    continue
+                finally:
+                    self.controller.FreeTrace(trace)
+
+                rdtest.log.success("Test {} pixel in sub-section {} matched as expected".format(test, child))
                 
                 vtx = 1
                 inst = 0
@@ -76,17 +95,67 @@ class GL_Shader_Debug_Zoo(rdtest.TestCase):
 
                     idx = indices[1]
 
-                    assert idx is not None
-
                 postvs = self.get_postvs(action, rd.MeshDataStage.VSOut, first_index=vtx, num_indices=1, instance=inst)
 
-                success, err = self.check_vertex_debug(vtx, idx, inst, postvs, fatal=False, single_postvs=True, name_retry = lambda x: x.replace(".", "Block."))
-                if not success:
+                trace: rd.ShaderDebugTrace = self.controller.DebugVertex(vtx, inst, idx, 0)
+
+                if trace.debugger is None:
                     failed = True
-                    rdtest.log.error(f"Error debugging vertex at test {test} in sub-section {child}: {err}")
+                    rdtest.log.error("Test {} in sub-section {} did not debug vertex".format(test, child))
+                    self.controller.FreeTrace(trace)
                     continue
 
-                rdtest.log.success(f"Test {test} vertex in sub-section {child} matched as expected")
+                _, variables = self.process_trace(trace)
+
+                outputs = 0
+
+                for var in trace.sourceVars:
+                    var: rd.SourceVariableMapping
+                    if var.variables[0].type == rd.DebugVariableType.Variable and var.signatureIndex >= 0:
+                        name = var.name
+
+                        if name not in postvs[0].keys():
+                            name = name.replace(".", "Block.")
+                            if name not in postvs[0].keys():
+                                failed = True
+                                rdtest.log.error("Don't have expected output for {}".format(name))
+                                continue
+
+                        expect = postvs[0][name]
+                        value = self.evaluate_source_var(var, variables)
+
+                        if len(expect) != value.columns:
+                            failed = True
+                            rdtest.log.error(
+                                "Output {} at EID {} has different size ({} values) to expectation ({} values)"
+                                    .format(name, action.eventId, value.columns, len(expect)))
+                            continue
+
+                        compType = rd.VarTypeCompType(value.type)
+                        if compType == rd.CompType.UInt:
+                            debugged = list(value.value.u32v[0:value.columns])
+                        elif compType == rd.CompType.SInt:
+                            debugged = list(value.value.s32v[0:value.columns])
+                        else:
+                            debugged = list(value.value.f32v[0:value.columns])
+
+                        if not rdtest.value_compare(expect, debugged):
+                            failed = True
+                            rdtest.log.error("Test {} in sub-section {} did not match vertex.\nExpected {} but got {}".format(test, child, expect, debugged))
+                            break
+
+                        is_eq, diff_amt = rdtest.value_compare_diff(expect, debugged, eps=5.0E-06)
+                        if not is_eq:
+                            failed = True
+                            rdtest.log.error(
+                                "Debugged value {} at EID {} vert {} (idx {}) instance {}: {} difference. {} doesn't exactly match postvs output {}".format(
+                                    name, action.eventId, vtx, idx, inst, diff_amt, debugged, expect))
+
+                        outputs = outputs + 1
+
+                self.controller.FreeTrace(trace)
+
+                rdtest.log.success("Test {} vertex in sub-section {} matched as expected".format(test, child))
 
             rdtest.log.end_section(child)
 

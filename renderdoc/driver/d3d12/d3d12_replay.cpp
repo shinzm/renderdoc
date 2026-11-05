@@ -169,8 +169,7 @@ IReplayDriver *D3D12Replay::MakeDummyDriver()
   rdcarray<const ShaderReflection *> shaders;
   WrappedID3D12Shader::GetReflections(shaders);
 
-  IReplayDriver *dummy = new DummyDriver(this, shaders, m_pDevice->DetachStructuredFile(),
-                                         m_pDevice->DetachAnnotations());
+  IReplayDriver *dummy = new DummyDriver(this, shaders, m_pDevice->DetachStructuredFile());
 
   return dummy;
 }
@@ -395,8 +394,7 @@ rdcarray<BufferDescription> D3D12Replay::GetBuffers()
   rdcarray<BufferDescription> ret;
 
   for(auto it = m_pDevice->GetResourceList().begin(); it != m_pDevice->GetResourceList().end(); it++)
-    if(it->second->GetDesc().Dimension == D3D12_RESOURCE_DIMENSION_BUFFER &&
-       !ResourceIDGen::IsReplayOnlyID(it->first))
+    if(it->second->GetDesc().Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
       ret.push_back(GetBuffer(it->first));
 
   return ret;
@@ -432,12 +430,6 @@ BufferDescription D3D12Replay::GetBuffer(ResourceId id)
 
   ret.creationFlags = BufferCategory::NoFlags;
   ret.gpuAddress = it->second->GetOriginalVA();
-
-  if(it->second->GetHeap())
-  {
-    ret.memory = it->second->GetHeap()->GetResourceID();
-    ret.memoryOffset = it->second->GetHeapOffset();
-  }
 
   const rdcarray<EventUsage> &usage = m_pDevice->GetQueue()->GetUsage(id);
 
@@ -486,29 +478,11 @@ TextureDescription D3D12Replay::GetTexture(ResourceId id)
   ret.mips = desc.MipLevels;
   ret.msQual = desc.SampleDesc.Quality;
   ret.msSamp = RDCMAX(1U, desc.SampleDesc.Count);
-
-  if(desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
-  {
-    ret.byteSize = desc.Width;
-  }
-  else
-  {
-    ret.byteSize = m_pDevice->GetResourceAllocationInfo(0, 1, &desc).SizeInBytes;
-  }
-
-  if(ret.byteSize == 0)
-  {
-    for(uint32_t i = 0; i < ret.mips; i++)
-      ret.byteSize += GetByteSize(ret.width, ret.height, ret.depth, desc.Format, i);
-    ret.byteSize *= ret.arraysize;
-    ret.byteSize *= ret.msSamp;
-  }
-
-  if(it->second->GetHeap())
-  {
-    ret.memory = it->second->GetHeap()->GetResourceID();
-    ret.memoryOffset = it->second->GetHeapOffset();
-  }
+  ret.byteSize = 0;
+  for(uint32_t i = 0; i < ret.mips; i++)
+    ret.byteSize += GetByteSize(ret.width, ret.height, ret.depth, desc.Format, i);
+  ret.byteSize *= ret.arraysize;
+  ret.byteSize *= ret.msSamp;
 
   switch(ret.dimension)
   {
@@ -814,8 +788,7 @@ void D3D12Replay::FillDescriptor(Descriptor &dst, const D3D12Descriptor *src)
       if(srv.ViewDimension == D3D12_SRV_DIMENSION_UNKNOWN)
         srv = MakeSRVDesc(res);
 
-      if(srv.ViewDimension == D3D12_SRV_DIMENSION_BUFFER ||
-         srv.ViewDimension == D3D12_SRV_DIMENSION_BUFFER_BYTE_OFFSET)
+      if(srv.ViewDimension == D3D12_SRV_DIMENSION_BUFFER)
         dst.type = DescriptorType::TypedBuffer;
       else
         dst.type = DescriptorType::Image;
@@ -842,17 +815,6 @@ void D3D12Replay::FillDescriptor(Descriptor &dst, const D3D12Descriptor *src)
         if(srv.Buffer.StructureByteStride > 0)
         {
           dst.elementByteSize = srv.Buffer.StructureByteStride;
-          dst.type = DescriptorType::Buffer;
-        }
-      }
-      else if(srv.ViewDimension == D3D12_SRV_DIMENSION_BUFFER_BYTE_OFFSET)
-      {
-        dst.byteOffset = srv.BufferByteOffset.Offset;
-        dst.byteSize = srv.BufferByteOffset.Size;
-        dst.flags = MakeDescriptorFlags(srv.BufferByteOffset.Flags);
-        if(srv.BufferByteOffset.StructureByteStride > 0)
-        {
-          dst.elementByteSize = srv.BufferByteOffset.StructureByteStride;
           dst.type = DescriptorType::Buffer;
         }
       }
@@ -951,8 +913,7 @@ void D3D12Replay::FillDescriptor(Descriptor &dst, const D3D12Descriptor *src)
       if(uav.ViewDimension == D3D12_UAV_DIMENSION_UNKNOWN)
         uav = MakeUAVDesc(res);
 
-      if(uav.ViewDimension == D3D12_UAV_DIMENSION_BUFFER ||
-         uav.ViewDimension == D3D12_UAV_DIMENSION_BUFFER_BYTE_OFFSET)
+      if(uav.ViewDimension == D3D12_UAV_DIMENSION_BUFFER)
         dst.type = uav.Format != DXGI_FORMAT_UNKNOWN ? DescriptorType::ReadWriteTypedBuffer
                                                      : DescriptorType::ReadWriteBuffer;
       else
@@ -981,26 +942,6 @@ void D3D12Replay::FillDescriptor(Descriptor &dst, const D3D12Descriptor *src)
           bytebuf counterVal;
           GetDebugManager()->GetBufferData(rm->GetResAs<ID3D12Resource>(src->GetCounterResourceId()),
                                            uav.Buffer.CounterOffsetInBytes, 4, counterVal);
-          uint32_t *val = (uint32_t *)&counterVal[0];
-          dst.bufferStructCount = *val;
-        }
-      }
-      else if(uav.ViewDimension == D3D12_UAV_DIMENSION_BUFFER_BYTE_OFFSET)
-      {
-        dst.byteOffset = uav.BufferByteOffset.Offset;
-        dst.byteSize = uav.BufferByteOffset.Size;
-        dst.flags = MakeDescriptorFlags(uav.BufferByteOffset.Flags);
-        if(uav.BufferByteOffset.StructureByteStride > 0)
-          dst.elementByteSize = uav.BufferByteOffset.StructureByteStride;
-
-        dst.counterByteOffset = uav.BufferByteOffset.CounterOffsetInBytes & 0xffffffff;
-        RDCASSERT(uav.BufferByteOffset.CounterOffsetInBytes < 0xffffffff);
-
-        if(dst.secondary != ResourceId())
-        {
-          bytebuf counterVal;
-          GetDebugManager()->GetBufferData(rm->GetResAs<ID3D12Resource>(src->GetCounterResourceId()),
-                                           uav.BufferByteOffset.CounterOffsetInBytes, 4, counterVal);
           uint32_t *val = (uint32_t *)&counterVal[0];
           dst.bufferStructCount = *val;
         }
@@ -1890,7 +1831,7 @@ rdcarray<Descriptor> D3D12Replay::GetDescriptors(ResourceId descriptorStore,
         WrappedID3D12Resource::GetResIDFromAddr(cbv.BufferLocation, ret[dst].resource,
                                                 ret[dst].byteOffset);
 
-        ret[dst].type = DescriptorType::ConstantBuffer;
+        ret[dst].resource = ret[dst].resource;
         ret[dst].byteSize = cbv.SizeInBytes;
       }
       else if(desc->GetType() == D3D12DescriptorType::Sampler)
@@ -3378,11 +3319,11 @@ rdcarray<uint32_t> D3D12Replay::GetPassEvents(uint32_t eventId)
 
     // if we've come to the start of the log we were outside of a list
     // to start with
-    if(start->previousAction == NULL)
+    if(start->previous == NULL)
       return passEvents;
 
     // step back
-    const ActionDescription *prev = start->previousAction;
+    const ActionDescription *prev = start->previous;
 
     // if the previous is a clear, we're done
     if(prev->flags & ActionFlags::Clear)
@@ -3408,7 +3349,7 @@ rdcarray<uint32_t> D3D12Replay::GetPassEvents(uint32_t eventId)
     if(start->flags & (ActionFlags::MeshDispatch | ActionFlags::Drawcall | ActionFlags::PassBoundary))
       passEvents.push_back(start->eventId);
 
-    start = start->nextAction;
+    start = start->next;
   }
 
   return passEvents;
@@ -4487,8 +4428,8 @@ ResourceId D3D12Replay::ApplyCustomShader(TextureDisplay &display)
   disp.linearDisplayAsGamma = false;
   disp.subresource = display.subresource;
   disp.overlay = DebugOverlay::NoOverlay;
-  disp.rangeMin = display.rangeMin;
-  disp.rangeMax = display.rangeMax;
+  disp.rangeMin = 0.0f;
+  disp.rangeMax = 1.0f;
   disp.rawOutput = false;
   disp.scale = 1.0f;
 
@@ -4811,7 +4752,7 @@ RDResult D3D12_CreateReplayDevice(RDCFile *rdc, const ReplayOptions &opts, IRepl
       config->devfactory->EnableExperimentalFeatures(1, &D3D12GPUUploadHeapsOnUnsupportedOS, NULL,
                                                      NULL);
     }
-    else if(enableExperimentalPtr)
+    else
     {
       enableExperimentalPtr(1, &D3D12GPUUploadHeapsOnUnsupportedOS, NULL, NULL);
     }

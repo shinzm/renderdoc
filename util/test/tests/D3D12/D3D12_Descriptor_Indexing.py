@@ -1,5 +1,3 @@
-from typing import Any, Dict, List, Tuple
-
 import rdtest
 import renderdoc as rd
 
@@ -7,10 +5,10 @@ import renderdoc as rd
 class D3D12_Descriptor_Indexing(rdtest.TestCase):
     demos_test_name = 'D3D12_Descriptor_Indexing'
 
-    def check_compute(self, eventId: int):
+    def check_compute(self, eventId):
         action = self.find_action("Dispatch", eventId)
-        assert action is not None
-        self.set_event(action.eventId, False)
+        self.check(action is not None)
+        self.controller.SetFrameEvent(action.eventId, False)
 
         pipe = self.controller.GetPipelineState()
         d3d12pipe = self.controller.GetD3D12PipelineState()
@@ -24,7 +22,7 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
         self.check_eq(rw[0].access.staticallyUnused, False)
         self.check_eq(rw[0].access.arrayElement, 15)
         # we don't check currently which one is the sampler heap
-        assert rw[0].access.descriptorStore in d3d12pipe.descriptorHeaps
+        self.check(rw[0].access.descriptorStore in d3d12pipe.descriptorHeaps)
 
         self.check_eq(len(pipe.GetReadOnlyResources(rd.ShaderStage.Compute)), 0)
 
@@ -32,7 +30,7 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
 
         # should get the same results for dynamic array indexing, the 'only used' is only for
         # statically unused or used bindings
-        assert rw == rw_used
+        self.check(rw == rw_used)
 
     def check_capture(self):
         for sm in ["sm_5_1", "sm_6_0", "sm_6_6"]:
@@ -43,8 +41,8 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
             self.check_compute(base.eventId)
 
             action = self.find_action("Draw", base.eventId)
-            assert action is not None
-            self.set_event(action.eventId, False)
+            self.check(action is not None)
+            self.controller.SetFrameEvent(action.eventId, False)
 
             pipe = self.controller.GetPipelineState()
             d3d12pipe = self.controller.GetD3D12PipelineState()
@@ -58,7 +56,7 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
             #     image 99 and 103 in root range 1 should be used
             #
             # Currently D3D12 only reports descriptor category
-            bind_info: Dict[Tuple[rd.DescriptorCategory, int], Dict[str, Any]] = {
+            bind_info = {
                 (rd.DescriptorCategory.ReadOnlyResource, 0): {
                     'loc': (0, 8),
                     'elems': [0],
@@ -105,7 +103,7 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
                 idx = (rd.CategoryForDescriptorType(a.access.type), a.access.index)
                 if a.access.type == rd.DescriptorType.Sampler and a.access.index == 0:  # static sampler
                     # descriptor store should not be a heap, but we don't verify exactly where it comes from
-                    assert a.access.descriptorStore not in d3d12pipe.descriptorHeaps
+                    self.check(a.access.descriptorStore not in d3d12pipe.descriptorHeaps)
                     continue
 
                 heapName = "ResourceDescriptorHeap"
@@ -119,14 +117,17 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
 
                 if idx not in bind_info.keys():
                     raise rdtest.TestFailureException(
-                        f"Accessed bind {a.access.index} of type {a.access.type!s} doesn't exist in expected list")
+                        "Accessed bind {} of type {} doesn't exist in expected list".format(
+                            a.access.index, str(a.access.type)))
 
                 if a.access.arrayElement not in bind_info[idx]['elems']:
                     raise rdtest.TestFailureException(
-                        f"Bind {res.name} reports array element {a.access.arrayElement} as used, which shouldn't be")
+                        "Bind {} reports array element {} as used, which shouldn't be".format(
+                            res.name, a.access.arrayElement))
 
                 if (res.fixedBindSetOrSpace, res.fixedBindNumber) != bind_info[idx]['loc']:
-                    raise rdtest.TestFailureException(f"Bind {res.name} expected to be {bind_info[idx]['loc']} but is {res.fixedBindSetOrSpace}, {res.fixedBindNumber}")
+                    raise rdtest.TestFailureException("Bind {} expected to be {} but is {}, {}".format(
+                        res.name, bind_info[idx]['loc'], res.fixedBindSetOrSpace, res.fixedBindNumber))
 
                 # On D3D12 the logical location is just an index into the heap. This test sets up all
                 # descriptor tables at 0 so register = heap
@@ -134,23 +135,23 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
                                                              [rd.DescriptorRange(a.access)])[0]
                 if loc.fixedBindNumber != bind_info[idx]['loc'][1] + a.access.arrayElement:
                     raise rdtest.TestFailureException(
-                        f"Location {loc.fixedBindNumber} not expected for {a.access.type!s} at space,reg {bind_info[idx]['loc']} array element {a.access.arrayElement}")
-
+                        "Location {} not expected for {} at space,reg {} array element {}".format(
+                            loc.fixedBindNumber, str(a.access.type), bind_info[idx]['loc'], a.access.arrayElement))
+                
                 expectedDescName = bind_info[idx]['names'][a.access.arrayElement]
                 if expectedDescName == '':
                     expectedDescName = heapName
 
-                expectedDescName = f"{expectedDescName}[{bind_info[idx]['loc'][1] + a.access.arrayElement}]"
+                expectedDescName = "{}[{}]".format(expectedDescName, bind_info[idx]['loc'][1] + a.access.arrayElement)
 
                 if loc.logicalBindName != expectedDescName:
                     raise rdtest.TestFailureException(
-                        f"Location {loc.logicalBindName} not the expected {expectedDescName} for space,reg {bind_info[idx]['loc']} array element {a.access.arrayElement}")
+                        "Location {} not the expected {} for space,reg {} array element {}".format(
+                            loc.logicalBindName, expectedDescName, bind_info[idx]['loc'], a.access.arrayElement))
 
                 bind_info[idx]['elems'].remove(a.access.arrayElement)
 
-            rdtest.log.success(f"Dynamic usage is as expected for {sm}")
-
-            self.check_debug_pixel()
+            rdtest.log.success("Dynamic usage is as expected for {}".format(sm))
 
         for sm in ["sm_6_6_heap"]:
             base = self.find_action("Tests " + sm)
@@ -160,8 +161,8 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
             self.check_compute(base.eventId)
 
             action = self.find_action("Draw", base.eventId)
-            assert action is not None
-            self.set_event(action.eventId, False)
+            self.check(action is not None)
+            self.controller.SetFrameEvent(action.eventId, False)
 
             pipe = self.controller.GetPipelineState()
 
@@ -170,7 +171,7 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
             #   - Samplers
             #   - SRV resources
             #   - UAV resources
-            heap_bind_info: Dict[rd.DescriptorCategory, List[int]] = {
+            bind_info = {
                 rd.DescriptorCategory.ConstantBlock: [9],
                 rd.DescriptorCategory.Sampler: [0, 1, 2, 19, 20, 21, 25],
                 rd.DescriptorCategory.ReadOnlyResource: [8, 12, 19, 20, 21, 49, 59, 6, 99, 103, 156, 162],
@@ -182,36 +183,24 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
             rw = pipe.GetReadWriteResources(rd.ShaderStage.Pixel)
 
             # All accesses should come direct without a shader binding
-            assert all([d.access.index == rd.DescriptorAccess.NoShaderBinding for d in ro])
-            assert all([d.access.index == rd.DescriptorAccess.NoShaderBinding for d in samp])
-            assert all([d.access.index == rd.DescriptorAccess.NoShaderBinding for d in rw])
+            self.check(all([d.access.index == rd.DescriptorAccess.NoShaderBinding for d in ro]))
+            self.check(all([d.access.index == rd.DescriptorAccess.NoShaderBinding for d in samp]))
+            self.check(all([d.access.index == rd.DescriptorAccess.NoShaderBinding for d in rw]))
             # Check accesses are in the right lists
-            assert all(
-                [
-                    rd.CategoryForDescriptorType(d.access.type)
-                    == rd.DescriptorCategory.ReadOnlyResource
-                    for d in ro
-                ]
-            )
-            assert all(
-                [
-                    rd.CategoryForDescriptorType(d.access.type)
-                    == rd.DescriptorCategory.Sampler
-                    for d in samp
-                ]
-            )
-            assert all(
-                [
-                    rd.CategoryForDescriptorType(d.access.type)
-                    == rd.DescriptorCategory.ReadWriteResource
-                    for d in rw
-                ]
-            )
+            self.check(
+                all([rd.CategoryForDescriptorType(d.access.type) == rd.DescriptorCategory.ReadOnlyResource for d in ro
+                    ]))
+            self.check(all([rd.CategoryForDescriptorType(d.access.type) == rd.DescriptorCategory.Sampler for d in samp
+                           ]))
+            self.check(
+                all([
+                    rd.CategoryForDescriptorType(d.access.type) == rd.DescriptorCategory.ReadWriteResource for d in rw
+                ]))
             # the "byte offsets" are descriptor indices and should match the expectation above
-            assert [d.access.byteOffset for d in rw] == sorted(heap_bind_info[rd.DescriptorCategory.ReadWriteResource])
-            assert [d.access.byteOffset for d in ro] == sorted(heap_bind_info[rd.DescriptorCategory.ReadOnlyResource])
-            assert [d.access.byteOffset for d in samp] == sorted(heap_bind_info[rd.DescriptorCategory.Sampler])
-
+            self.check([d.access.byteOffset for d in rw] == sorted(bind_info[rd.DescriptorCategory.ReadWriteResource]))
+            self.check([d.access.byteOffset for d in ro] == sorted(bind_info[rd.DescriptorCategory.ReadOnlyResource]))
+            self.check([d.access.byteOffset for d in samp] == sorted(bind_info[rd.DescriptorCategory.Sampler]))
+            
             descriptor_names = {
                 12: 'smiley',
                 19: 'another_smiley',
@@ -224,7 +213,8 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
                                                              [rd.DescriptorRange(a.access)])[0]
 
                 if loc.fixedBindNumber != a.access.byteOffset:
-                    raise rdtest.TestFailureException(f"Bind {loc.fixedBindNumber} not expected for offset/index {a.access.byteOffset}")
+                    raise rdtest.TestFailureException("Bind {} not expected for space,reg {} array element {}".format(
+                        loc.fixedBindNumber, a.access.byteOffset))
 
                 if a.access.byteOffset in descriptor_names.keys():
                     name = descriptor_names[a.access.byteOffset]
@@ -240,12 +230,12 @@ class D3D12_Descriptor_Indexing(rdtest.TestCase):
                                                              [rd.DescriptorRange(a.access)])[0]
 
                 if loc.fixedBindNumber != a.access.byteOffset:
-                    raise rdtest.TestFailureException(f"Bind {loc.fixedBindNumber} not expected for offset/index {a.access.byteOffset}")
+                    raise rdtest.TestFailureException("Bind {} not expected for space,reg {} array element {}".format(
+                        loc.fixedBindNumber, a.access.byteOffset))
 
-                if loc.logicalBindName != f"SamplerDescriptorHeap[{a.access.byteOffset}]":
+                if loc.logicalBindName != "SamplerDescriptorHeap[{}]".format(a.access.byteOffset):
                     raise rdtest.TestFailureException(
-                        f"Bind {loc.logicalBindName} not expected for descriptor access SamplerDescriptorHeap[{a.access.byteOffset}]")
+                        "Bind {} not expected for descriptor access SamplerDescriptorHeap[{}]".format(
+                            loc.logicalBindName, a.access.byteOffset))
 
-            rdtest.log.success(f"Dynamic usage is as expected for {sm}")
-
-            self.check_debug_pixel()
+            rdtest.log.success("Dynamic usage is as expected for {}".format(sm))

@@ -1,3 +1,4 @@
+import renderdoc as rd
 import rdtest
 
 
@@ -7,9 +8,9 @@ class D3D12_Write_Subresource(rdtest.TestCase):
     def check_capture(self):
         action = self.find_action("Draw")
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         # Should be black around the sides, white in the centre
         self.check_pixel_value(pipe.GetOutputTargets()[0].resource, 0.05, 0.05, [0.0, 0.0, 0.0, 0.0])

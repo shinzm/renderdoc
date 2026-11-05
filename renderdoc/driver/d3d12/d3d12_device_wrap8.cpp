@@ -39,26 +39,7 @@ void STDMETHODCALLTYPE WrappedID3D12Device::CreateSamplerFeedbackUnorderedAccess
     _In_opt_ ID3D12Resource *pTargetedResource, _In_opt_ ID3D12Resource *pFeedbackResource,
     _In_ D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor)
 {
-  CreateSamplerFeedbackUnorderedAccessView(false, pTargetedResource, pFeedbackResource,
-                                           DestDescriptor);
-}
-
-HRESULT STDMETHODCALLTYPE WrappedID3D12Device::TryCreateSamplerFeedbackUnorderedAccessView(
-    ID3D12Resource *pTargetedResource, ID3D12Resource *pFeedbackResource,
-    D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor)
-{
-  return CreateSamplerFeedbackUnorderedAccessView(true, pTargetedResource, pFeedbackResource,
-                                                  DestDescriptor);
-}
-
-HRESULT WrappedID3D12Device::CreateSamplerFeedbackUnorderedAccessView(
-    bool tryCall, ID3D12Resource *pTargetedResource, ID3D12Resource *pFeedbackResource,
-    D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor)
-{
-  RDCERR(
-      "TryCreateSamplerFeedbackUnorderedAccessView called but sampler feedback is not "
-      "supported!");
-  return E_NOINTERFACE;
+  RDCERR("CreateSamplerFeedbackUnorderedAccessView called but sampler feedback is not supported!");
 }
 
 void STDMETHODCALLTYPE WrappedID3D12Device::GetCopyableFootprints1(

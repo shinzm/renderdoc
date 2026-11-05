@@ -1,6 +1,3 @@
-from __future__ import annotations
-from typing import Any, Callable, Dict
-
 import rdtest
 import renderdoc as rd
 
@@ -11,20 +8,19 @@ class D3D12_Reflection_Zoo(rdtest.TestCase):
     def check_capture(self):
         action = self.find_action("DXBC")
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.nextAction.eventId, False)
+        self.controller.SetFrameEvent(action.next.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         stage = rd.ShaderStage.Pixel
 
         # Verify that the DXBC action is first
-        refl = pipe.GetShaderReflection(stage)
-        assert refl is not None
-        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), refl, '')
+        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), pipe.GetShaderReflection(stage),
+                                                   '')
 
-        assert 'ps_5_1' in disasm
+        self.check('ps_5_1' in disasm)
 
         self.check_event()
 
@@ -37,15 +33,14 @@ class D3D12_Reflection_Zoo(rdtest.TestCase):
             rdtest.log.print("No SM6.0 DXIL action to test")
             return
 
-        self.set_event(action.nextAction.eventId, False)
+        self.controller.SetFrameEvent(action.next.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
-        refl = pipe.GetShaderReflection(stage)
-        assert refl is not None
-        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), refl, '')
+        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), pipe.GetShaderReflection(stage),
+                                                   '')
 
-        assert 'SM6.0' in disasm
+        self.check('SM6.0' in disasm)
 
         self.check_event()
 
@@ -58,33 +53,32 @@ class D3D12_Reflection_Zoo(rdtest.TestCase):
             rdtest.log.print("No SM6.7 DXIL action to test")
             return
 
-        self.set_event(action.nextAction.eventId, False)
+        self.controller.SetFrameEvent(action.next.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
-        refl = pipe.GetShaderReflection(stage)
-        assert refl is not None
-        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), refl, '')
+        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), pipe.GetShaderReflection(stage),
+                                                   '')
 
-        assert 'SM6.7' in disasm
+        self.check('SM6.7' in disasm)
 
         self.check_event()
 
         rdtest.log.success("SM6.7 DXIL action is as expected")
 
     def check_event(self):
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         stage = rd.ShaderStage.Pixel
 
-        refl = pipe.GetShaderReflection(stage)
+        refl: rd.ShaderReflection = pipe.GetShaderReflection(stage)
 
         # Check we have the source and it is unmangled
-        debugInfo = refl.debugInfo
+        debugInfo: rd.ShaderDebugInfo = refl.debugInfo
 
-        assert len(debugInfo.files) == 1
+        self.check(len(debugInfo.files) == 1)
 
-        assert 'Iñtërnâtiônàližætiøn' in debugInfo.files[0].contents
+        self.check('Iñtërnâtiônàližætiøn' in debugInfo.files[0].contents)
 
         def checker(textureType: rd.TextureType,
                     varType: rd.VarType,
@@ -94,7 +88,7 @@ class D3D12_Reflection_Zoo(rdtest.TestCase):
                     *,
                     isTexture: bool = True,
                     regCount: int = 1,
-                    structVarCheck: Callable[[rd.ShaderConstantType], None] | None=None) -> Dict[str, Any]:
+                    structVarCheck=None):
             return {
                 'textureType': textureType,
                 'isTexture': isTexture,
@@ -107,47 +101,47 @@ class D3D12_Reflection_Zoo(rdtest.TestCase):
             }
 
         def buf_struct_check(type: rd.ShaderConstantType):
-            assert type.name == 'buf_struct'
-            assert len(type.members) == 3
+            self.check(type.name == 'buf_struct')
+            self.check(len(type.members) == 3)
 
-            assert type.members[0].name == 'a'
-            assert type.members[0].type.baseType == rd.VarType.Float
-            assert type.members[0].type.rows == 1
-            assert type.members[0].type.columns == 1
-            assert type.members[0].type.elements == 1
-            assert type.members[0].byteOffset == 0
-            assert type.members[0].bitFieldOffset == 0
-            assert type.members[0].bitFieldSize == 0
+            self.check(type.members[0].name == 'a')
+            self.check(type.members[0].type.baseType == rd.VarType.Float)
+            self.check(type.members[0].type.rows == 1)
+            self.check(type.members[0].type.columns == 1)
+            self.check(type.members[0].type.elements == 1)
+            self.check(type.members[0].byteOffset == 0)
+            self.check(type.members[0].bitFieldOffset == 0)
+            self.check(type.members[0].bitFieldSize == 0)
 
-            assert type.members[1].name == 'b'
-            assert type.members[1].type.baseType == rd.VarType.Float
-            assert type.members[1].type.rows == 1
-            assert type.members[1].type.columns == 1
-            assert type.members[1].type.elements == 2
-            assert type.members[1].byteOffset == 4
-            assert type.members[1].bitFieldOffset == 0
-            assert type.members[1].bitFieldSize == 0
+            self.check(type.members[1].name == 'b')
+            self.check(type.members[1].type.baseType == rd.VarType.Float)
+            self.check(type.members[1].type.rows == 1)
+            self.check(type.members[1].type.columns == 1)
+            self.check(type.members[1].type.elements == 2)
+            self.check(type.members[1].byteOffset == 4)
+            self.check(type.members[1].bitFieldOffset == 0)
+            self.check(type.members[1].bitFieldSize == 0)
 
-            assert type.members[2].name == 'c'
-            assert type.members[2].type.name == 'nested'
-            assert type.members[2].byteOffset == 12
-            assert type.members[2].bitFieldOffset == 0
-            assert type.members[2].bitFieldSize == 0
-            assert len(type.members[2].type.members) == 1
-            assert type.members[2].type.members[0].name == 'x'
-            assert type.members[2].type.members[0].type.baseType == rd.VarType.Float
-            assert type.members[2].type.members[0].type.rows == 2
-            assert type.members[2].type.members[0].type.columns == 3
-            assert type.members[2].type.members[0].type.RowMajor()
-            assert type.members[2].type.members[0].byteOffset == 0
-            assert type.members[2].type.members[0].bitFieldOffset == 0
-            assert type.members[2].type.members[0].bitFieldSize == 0
+            self.check(type.members[2].name == 'c')
+            self.check(type.members[2].type.name == 'nested')
+            self.check(type.members[2].byteOffset == 12)
+            self.check(type.members[2].bitFieldOffset == 0)
+            self.check(type.members[2].bitFieldSize == 0)
+            self.check(len(type.members[2].type.members) == 1)
+            self.check(type.members[2].type.members[0].name == 'x')
+            self.check(type.members[2].type.members[0].type.baseType == rd.VarType.Float)
+            self.check(type.members[2].type.members[0].type.rows == 2)
+            self.check(type.members[2].type.members[0].type.columns == 3)
+            self.check(type.members[2].type.members[0].type.RowMajor())
+            self.check(type.members[2].type.members[0].byteOffset == 0)
+            self.check(type.members[2].type.members[0].bitFieldOffset == 0)
+            self.check(type.members[2].type.members[0].bitFieldSize == 0)
 
             return
 
         def sm67_struct_check(type: rd.ShaderConstantType):
-            assert type.name == 'sm67_struct'
-            assert len(type.members) == 17
+            self.check(type.name == 'sm67_struct')
+            self.check(len(type.members) == 17)
 
             # to simplify checks we only look at offsets and bitfield properties,
             # assuming the base types are the same (except for deliberate int
@@ -397,46 +391,48 @@ class D3D12_Reflection_Zoo(rdtest.TestCase):
         access = [(a.type, a.index) for a in self.controller.GetDescriptorAccess()]
 
         for idx, s in enumerate(refl.samplers):
-            assert s.fixedBindSetOrSpace == 0
-            assert (rd.DescriptorType.Sampler, idx) in access
-            assert s.bindArraySize == 1
+            self.check(s.fixedBindSetOrSpace == 0)
+            self.check((rd.DescriptorType.Sampler, idx) in access)
+            self.check(s.bindArraySize == 1)
 
             if s.name == 's1':
-                assert s.fixedBindNumber == 5
+                self.check(s.fixedBindNumber == 5)
             elif s.name == 's2':
-                assert s.fixedBindNumber == 8
+                self.check(s.fixedBindNumber == 8)
             else:
-                raise rdtest.TestFailureException(f'Unrecognised sampler {s.name}')
+                raise rdtest.TestFailureException('Unrecognised sampler {}'.format(s.name))
 
         for res_list, res_db, res_readonly in [(refl.readOnlyResources, ro_db, True),
                                                (refl.readWriteResources, rw_db, False)]:
             for idx, res in enumerate(res_list):
-                assert res.isReadOnly == res_readonly
-                assert res.fixedBindSetOrSpace == 0
+                res: rd.ShaderResource
 
-                assert (res.descriptorType, idx) in access, f"{res.name} not found - ({res.descriptorType!s}, {idx})"
+                self.check(res.isReadOnly == res_readonly)
+                self.check(res.fixedBindSetOrSpace == 0)
+
+                self.check((res.descriptorType, idx) in access, f"{res.name} - ({str(res.descriptorType)}, {idx})")
 
                 if res.name in res_db:
                     check = res_db[res.name]
 
-                    assert res.textureType == check['textureType']
-                    assert res.isTexture == check['isTexture']
+                    self.check(res.textureType == check['textureType'])
+                    self.check(res.isTexture == check['isTexture'])
 
                     if check['structVarCheck']:
                         check['structVarCheck'](res.variableType)
                     else:
-                        assert res.variableType.baseType == check['varType']
-                        assert res.variableType.name == check['typeName']
-                        assert res.variableType.columns == check['columns']
+                        self.check(res.variableType.baseType == check['varType'])
+                        self.check(res.variableType.name == check['typeName'])
+                        self.check(res.variableType.columns == check['columns'])
 
-                    assert res.fixedBindNumber == check['register']
-                    assert res.bindArraySize == check['regCount']
+                    self.check(res.fixedBindNumber == check['register'])
+                    self.check(res.bindArraySize == check['regCount'])
                 else:
                     raise rdtest.TestFailureException(f"Unrecognised {'read-only' if res_readonly else 'read-write'} resource {res.name}")
 
                 del res_db[res.name]
 
             if len(res_db) != 0:
-                raise rdtest.TestFailureException(f"Expected resources weren't found: {res_db.keys()}")
+                raise rdtest.TestFailureException("Expected resources weren't found: {}".format(res_db.keys()))
 
         rdtest.log.success("Reflected shader source as expected")

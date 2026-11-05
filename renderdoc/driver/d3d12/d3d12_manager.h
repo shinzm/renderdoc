@@ -67,9 +67,7 @@ struct D3D12_UNORDERED_ACCESS_VIEW_DESC_SQUEEZED
   uint8_t ViewDimension;
   uint8_t BufferFlags;
 
-  // 1 more bytes here
-
-  uint32_t BufferStride;
+  // 5 more bytes here - below union is 8-byte aligned
 
   union
   {
@@ -77,14 +75,9 @@ struct D3D12_UNORDERED_ACCESS_VIEW_DESC_SQUEEZED
     {
       UINT64 FirstElement;
       UINT NumElements;
+      UINT StructureByteStride;
       UINT64 CounterOffsetInBytes;
     } Buffer;
-    struct D3D12_BUFFER_UAV_BYTE_OFFSET_SQUEEZED
-    {
-      UINT64 Offset;
-      UINT64 Size;
-      UINT64 CounterOffsetInBytes;
-    } BufferByteOffset;
     D3D12_TEX1D_UAV Texture1D;
     D3D12_TEX1D_ARRAY_UAV Texture1DArray;
     D3D12_TEX2D_UAV Texture2D;
@@ -97,39 +90,21 @@ struct D3D12_UNORDERED_ACCESS_VIEW_DESC_SQUEEZED
     Format = (uint8_t)desc.Format;
     ViewDimension = (uint8_t)desc.ViewDimension;
 
-    // all but buffer elements should fit in 2 UINT64s, so when we copy Offset and Size (first two
-    // elements in BufferByteOffset) we will cover them
-    RDCCOMPILE_ASSERT(sizeof(Texture1D) <= sizeof(UINT64) * 2,
-                      "BufferByteOffset isn't largest union member!");
-    RDCCOMPILE_ASSERT(sizeof(Texture1DArray) <= sizeof(UINT64) * 2,
-                      "BufferByteOffset isn't largest union member!");
-    RDCCOMPILE_ASSERT(sizeof(Texture2D) <= sizeof(UINT64) * 2,
-                      "BufferByteOffset isn't largest union member!");
-    RDCCOMPILE_ASSERT(sizeof(Texture2DArray) <= sizeof(UINT64) * 2,
-                      "BufferByteOffset isn't largest union member!");
-    RDCCOMPILE_ASSERT(sizeof(Texture3D) <= sizeof(UINT64) * 2,
-                      "BufferByteOffset isn't largest union member!");
-    RDCCOMPILE_ASSERT(sizeof(Texture3D) <= sizeof(UINT64) * 2,
-                      "BufferByteOffset isn't largest union member!");
+    // all but buffer elements should fit in 4 UINTs, so we can copy the Buffer (minus the flags we
+    // moved) and still cover them.
+    RDCCOMPILE_ASSERT(sizeof(Texture1D) <= 4 * sizeof(UINT), "Buffer isn't largest union member!");
+    RDCCOMPILE_ASSERT(sizeof(Texture1DArray) <= 4 * sizeof(UINT),
+                      "Buffer isn't largest union member!");
+    RDCCOMPILE_ASSERT(sizeof(Texture2D) <= 4 * sizeof(UINT), "Buffer isn't largest union member!");
+    RDCCOMPILE_ASSERT(sizeof(Texture2DArray) <= 4 * sizeof(UINT),
+                      "Buffer isn't largest union member!");
+    RDCCOMPILE_ASSERT(sizeof(Texture3D) <= 4 * sizeof(UINT), "Buffer isn't largest union member!");
 
-    if(desc.ViewDimension == D3D12_UAV_DIMENSION_BUFFER)
-    {
-      BufferStride = desc.Buffer.StructureByteStride;
-      BufferFlags = (uint8_t)desc.Buffer.Flags;
-
-      Buffer.FirstElement = desc.Buffer.FirstElement;
-      Buffer.NumElements = desc.Buffer.NumElements;
-      Buffer.CounterOffsetInBytes = desc.Buffer.CounterOffsetInBytes;
-    }
-    else
-    {
-      BufferStride = desc.BufferByteOffset.StructureByteStride;
-      BufferFlags = (uint8_t)desc.Buffer.Flags;
-
-      BufferByteOffset.Offset = desc.BufferByteOffset.Offset;
-      BufferByteOffset.Size = desc.BufferByteOffset.Size;
-      BufferByteOffset.CounterOffsetInBytes = desc.BufferByteOffset.CounterOffsetInBytes;
-    }
+    Buffer.FirstElement = desc.Buffer.FirstElement;
+    Buffer.NumElements = desc.Buffer.NumElements;
+    Buffer.StructureByteStride = desc.Buffer.StructureByteStride;
+    Buffer.CounterOffsetInBytes = desc.Buffer.CounterOffsetInBytes;
+    BufferFlags = (uint8_t)desc.Buffer.Flags;
   }
 
   D3D12_UNORDERED_ACCESS_VIEW_DESC AsDesc() const
@@ -139,24 +114,11 @@ struct D3D12_UNORDERED_ACCESS_VIEW_DESC_SQUEEZED
     desc.Format = (DXGI_FORMAT)Format;
     desc.ViewDimension = (D3D12_UAV_DIMENSION)ViewDimension;
 
-    if(desc.ViewDimension == D3D12_UAV_DIMENSION_BUFFER)
-    {
-      desc.Buffer.StructureByteStride = BufferStride;
-      desc.Buffer.Flags = (D3D12_BUFFER_UAV_FLAGS)BufferFlags;
-
-      desc.Buffer.FirstElement = Buffer.FirstElement;
-      desc.Buffer.NumElements = Buffer.NumElements;
-      desc.Buffer.CounterOffsetInBytes = Buffer.CounterOffsetInBytes;
-    }
-    else
-    {
-      desc.BufferByteOffset.StructureByteStride = BufferStride;
-      desc.BufferByteOffset.Flags = (D3D12_BUFFER_UAV_FLAGS)BufferFlags;
-
-      desc.BufferByteOffset.Offset = BufferByteOffset.Offset;
-      desc.BufferByteOffset.Size = BufferByteOffset.Size;
-      desc.BufferByteOffset.CounterOffsetInBytes = BufferByteOffset.CounterOffsetInBytes;
-    }
+    desc.Buffer.FirstElement = Buffer.FirstElement;
+    desc.Buffer.NumElements = Buffer.NumElements;
+    desc.Buffer.StructureByteStride = Buffer.StructureByteStride;
+    desc.Buffer.CounterOffsetInBytes = Buffer.CounterOffsetInBytes;
+    desc.Buffer.Flags = (D3D12_BUFFER_UAV_FLAGS)BufferFlags;
 
     return desc;
   }
@@ -176,6 +138,7 @@ struct D3D12_SHADER_RESOURCE_VIEW_DESC_SQUEEZED
   union
   {
     D3D12_BUFFER_SRV Buffer;
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_SRV AS;
     D3D12_TEX1D_SRV Texture1D;
     D3D12_TEX1D_ARRAY_SRV Texture1DArray;
     D3D12_TEX2D_SRV Texture2D;
@@ -185,8 +148,6 @@ struct D3D12_SHADER_RESOURCE_VIEW_DESC_SQUEEZED
     D3D12_TEX3D_SRV Texture3D;
     D3D12_TEXCUBE_SRV TextureCube;
     D3D12_TEXCUBE_ARRAY_SRV TextureCubeArray;
-    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_SRV AS;
-    D3D12_BUFFER_SRV_BYTE_OFFSET BufferByteOffset;
   };
 
   void Init(const D3D12_SHADER_RESOURCE_VIEW_DESC &desc)
@@ -216,8 +177,6 @@ struct D3D12_SHADER_RESOURCE_VIEW_DESC_SQUEEZED
     RDCCOMPILE_ASSERT(sizeof(TextureCube) <= sizeof(Texture2DArray),
                       "Texture2DArray isn't largest union member!");
     RDCCOMPILE_ASSERT(sizeof(TextureCubeArray) <= sizeof(Texture2DArray),
-                      "Texture2DArray isn't largest union member!");
-    RDCCOMPILE_ASSERT(sizeof(BufferByteOffset) <= sizeof(Texture2DArray),
                       "Texture2DArray isn't largest union member!");
 
     Texture2DArray = desc.Texture2DArray;

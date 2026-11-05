@@ -151,9 +151,6 @@ TIntermTyped* TIntermConstantUnion::fold(TOperator op, const TIntermTyped* right
             case EbtDouble:
             case EbtFloat:
             case EbtFloat16:
-            case EbtBFloat16:
-            case EbtFloatE5M2:
-            case EbtFloatE4M3:
                 if (rightUnionArray[i].getDConst() != 0.0)
                     newConstArray[i].setDConst(leftUnionArray[i].getDConst() / rightUnionArray[i].getDConst());
                 else if (leftUnionArray[i].getDConst() > 0.0)
@@ -506,9 +503,6 @@ TIntermTyped* TIntermConstantUnion::fold(TOperator op, const TType& returnType) 
             switch (getType().getBasicType()) {
             case EbtDouble:
             case EbtFloat16:
-            case EbtBFloat16:
-            case EbtFloatE5M2:
-            case EbtFloatE4M3:
             case EbtFloat:
                 valf = unionArray[i].getDConst();
                 srcType = CONV_FLOAT;
@@ -557,9 +551,6 @@ TIntermTyped* TIntermConstantUnion::fold(TOperator op, const TType& returnType) 
             switch (returnType.getBasicType()) {
             case EbtDouble:
             case EbtFloat16:
-            case EbtBFloat16:
-            case EbtFloatE5M2:
-            case EbtFloatE4M3:
             case EbtFloat:
                 dstType = CONV_FLOAT;
                 break;
@@ -630,9 +621,6 @@ TIntermTyped* TIntermConstantUnion::fold(TOperator op, const TType& returnType) 
             switch (returnType.getBasicType()) {
             case EbtDouble:
             case EbtFloat16:
-            case EbtBFloat16:
-            case EbtFloatE5M2:
-            case EbtFloatE4M3:
             case EbtFloat:
                 newConstArray[i].setDConst(valf); break;
             case EbtInt8:
@@ -664,9 +652,6 @@ TIntermTyped* TIntermConstantUnion::fold(TOperator op, const TType& returnType) 
             switch (getType().getBasicType()) {
             case EbtDouble:
             case EbtFloat16:
-            case EbtBFloat16:
-            case EbtFloatE5M2:
-            case EbtFloatE4M3:
             case EbtFloat: newConstArray[i].setDConst(-unionArray[i].getDConst()); break;
             // Note: avoid UBSAN error regarding negating 0x80000000
             case EbtInt:   newConstArray[i].setIConst(
@@ -959,9 +944,6 @@ TIntermTyped* TIntermediate::fold(TIntermAggregate* aggrNode)
             case EOpMin:
                 switch(children[0]->getAsTyped()->getBasicType()) {
                 case EbtFloat16:
-                case EbtBFloat16:
-                case EbtFloatE5M2:
-                case EbtFloatE4M3:
                 case EbtFloat:
                 case EbtDouble:
                     newConstArray[comp].setDConst(std::min(childConstUnions[0][arg0comp].getDConst(), childConstUnions[1][arg1comp].getDConst()));
@@ -996,9 +978,6 @@ TIntermTyped* TIntermediate::fold(TIntermAggregate* aggrNode)
             case EOpMax:
                 switch(children[0]->getAsTyped()->getBasicType()) {
                 case EbtFloat16:
-                case EbtBFloat16:
-                case EbtFloatE5M2:
-                case EbtFloatE4M3:
                 case EbtFloat:
                 case EbtDouble:
                     newConstArray[comp].setDConst(std::max(childConstUnions[0][arg0comp].getDConst(), childConstUnions[1][arg1comp].getDConst()));
@@ -1033,9 +1012,6 @@ TIntermTyped* TIntermediate::fold(TIntermAggregate* aggrNode)
             case EOpClamp:
                 switch(children[0]->getAsTyped()->getBasicType()) {
                 case EbtFloat16:
-                case EbtBFloat16:
-                case EbtFloatE5M2:
-                case EbtFloatE4M3:
                 case EbtFloat:
                 case EbtDouble:
                     newConstArray[comp].setDConst(std::min(std::max(childConstUnions[0][arg0comp].getDConst(), childConstUnions[1][arg1comp].getDConst()),
@@ -1143,9 +1119,6 @@ TIntermTyped* TIntermediate::fold(TIntermAggregate* aggrNode)
             break;
         }
         case EOpDot:
-            if (!children[0]->getAsTyped()->isFloatingDomain()) {
-                return aggrNode;
-            }
             newConstArray[0].setDConst(childConstUnions[0].dot(childConstUnions[1]));
             break;
         case EOpCross:

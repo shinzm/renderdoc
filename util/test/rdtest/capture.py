@@ -1,16 +1,15 @@
-from __future__ import annotations
 import os
 import signal
 import datetime
 import time
-from typing import Callable, List
 import renderdoc as rd
 from . import util
 from .logging import log
+from time import sleep
 
 
 class TargetControl():
-    def __init__(self, ident: int, host="localhost", username="testrunner", force=True, timeout: float | None=None, exit_kill=True):
+    def __init__(self, ident: int, host="localhost", username="testrunner", force=True, timeout=None, exit_kill=True):
         """
         Creates a target control manager for a given ident
 
@@ -22,13 +21,12 @@ class TargetControl():
         :param exit_kill: Whether to kill the process when the control loop ends.
         """
         self._pid = 0
-        self._captures: List[rd.NewCaptureData] = []
-        self._children: List[rd.NewChildData] = []
+        self._captures = []
+        self._children = []
         self.control = rd.CreateTargetControl(host, ident, username, force)
-        if timeout is not None:
-            self._timeout = timeout
-        else:
-            self._timeout = 60.0
+        self._timeout = timeout
+        if self._timeout is None:
+            self._timeout = 60
         self._exit_kill = exit_kill
 
         if self.control is None:
@@ -58,7 +56,7 @@ class TargetControl():
         if self.control is not None:
             self.control.QueueCapture(frame, num)
 
-    def run(self, keep_running: Callable[[TargetControl], bool]):
+    def run(self, keep_running):
         """
         Runs a loop ticking the target control. The callback is called each time and
         can be used to determine if the loop should keep running. The default callback
@@ -76,7 +74,7 @@ class TargetControl():
         start_time = datetime.datetime.now(datetime.timezone.utc)
 
         while keep_running(self):
-            msg = self.control.ReceiveMessage()
+            msg: rd.TargetControlMessage = self.control.ReceiveMessage(None)
 
             if (datetime.datetime.now(datetime.timezone.utc) - start_time).total_seconds() > self._timeout:
                 log.error("Timed out")
@@ -114,14 +112,9 @@ class TargetControl():
                     continue
 
 
-def run_executable(
-    exe: str,
-    cmdline: str,
-    workdir="",
-    envmods: List[rd.EnvironmentModification] | None = None,
-    cappath: str | None = None,
-    opts: rd.CaptureOptions | None = None,
-) -> int:
+def run_executable(exe: str, cmdline: str,
+                   workdir="", envmods=None, cappath=None,
+                   opts=rd.GetDefaultCaptureOptions()):
     """
     Runs an executable with RenderDoc injected, and returns the control ident.
 
@@ -137,8 +130,6 @@ def run_executable(
     """
     if envmods is None:
         envmods = []
-    if opts is None:
-        opts = rd.CaptureOptions()
     if cappath is None:
         cappath = util.get_tmp_path('capture')
 
@@ -148,29 +139,19 @@ def run_executable(
     server = util.get_remote_server()
     res = None
     if server is None:
-        log.print(f"Running exe:'{exe}' cmd:'{cmdline}' in dir:'{workdir}' with env:'{envmods}'")
+        log.print("Running exe:'{}' cmd:'{}' in dir:'{}' with env:'{}'".format(exe, cmdline, workdir, envmods))
         res = rd.ExecuteAndInject(exe, workdir, cmdline, envmods, cappath, opts, wait_for_exit)
     else:
         res = server.inject_and_run_exe(cmdline, envmods, opts)
 
-    if not res.result:
-        raise RuntimeError(f"Couldn't launch program: {res.result!s}")
+    if res.result != rd.ResultCode.Succeeded:
+        raise RuntimeError("Couldn't launch program: {}".format(str(res.result)))
 
     return res.ident
 
 
-def run_and_capture(
-    exe: str,
-    cmdline: str,
-    frame: int,
-    *,
-    frame_count=1,
-    captures_expected: int | None = None,
-    capture_name="",
-    opts: rd.CaptureOptions | None = None,
-    timeout: float | None = None,
-    logfile: str | None = None,
-) -> str:
+def run_and_capture(exe: str, cmdline: str, frame: int, *, frame_count=1, captures_expected=None, capture_name=None, opts=rd.GetDefaultCaptureOptions(),
+                    timeout=None, logfile=None):
     """
     Helper function to run an executable with a command line, capture a particular frame, and exit.
 
@@ -189,11 +170,8 @@ def run_and_capture(
     :rtype: str
     """
 
-    if capture_name == "":
+    if capture_name is None:
         capture_name = 'capture'
-
-    if opts is None:
-        opts = rd.CaptureOptions()
 
     if captures_expected is None:
         captures_expected = frame_count
@@ -213,8 +191,7 @@ def run_and_capture(
     control = TargetControl(run_executable(exe, cmdline, cappath=cappath, opts=opts),
                             host=host, username=username, timeout=timeout)
 
-    timeout_str = "default" if timeout is None else timeout
-    log.print(f"Queuing capture of frame {frame}..{frame+frame_count} with timeout of {timeout_str}")
+    log.print("Queuing capture of frame {}..{} with timeout of {}".format(frame, frame+frame_count, "default" if timeout is None else timeout))
 
     # Capture frame
     control.queue_capture(frame, frame_count)
@@ -227,7 +204,7 @@ def run_and_capture(
     log.print(f'Retrieved {len(captures)} captures')
 
     # Retrieve the demo logfile from the remote device
-    if server is not None and logfile is not None:
+    if server is not None:
         remote_logfile = server.get_temp_path('demos.log')
         if server.path_exists(remote_logfile):
             log.print("Copying remote demo log from '{}' to '{}'".format(server.get_temp_path('demos.log'), logfile))
@@ -241,6 +218,6 @@ def run_and_capture(
         if len(captures) == 0:
             raise RuntimeError("No capture made in program")
 
-        raise RuntimeError(f"Expected {frame_count} captures, but only got {len(captures)}")
+        raise RuntimeError("Expected {} captures, but only got {}".format(frame_count, len(captures)))
 
     return captures[0].path

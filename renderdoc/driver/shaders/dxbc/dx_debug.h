@@ -29,14 +29,14 @@
 
 namespace DXBC
 {
-enum ResourceRetType : uint8_t;
+enum ResourceRetType;
 enum class InterpolationMode : uint8_t;
 class DXBCContainer;
 };
 
 namespace DXBCBytecode
 {
-enum ResourceDimension : uint8_t;
+enum ResourceDimension;
 enum SamplerMode;
 };
 

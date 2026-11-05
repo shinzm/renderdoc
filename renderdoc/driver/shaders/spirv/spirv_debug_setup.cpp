@@ -49,7 +49,6 @@ enum class PointerFlags
   SSBO = 0x2,
   GlobalArrayBinding = 0x4,
   DereferencedPhysical = 0x8,
-  StructArrayBinding = 0x10,
 };
 
 BITMASK_OPERATORS(PointerFlags);
@@ -331,6 +330,11 @@ void Debugger::ClampScalars(const ShaderVariable &var, uint8_t &scalar0, uint8_t
   }
 }
 
+void Debugger::Parse(const rdcarray<uint32_t> &spirvWords)
+{
+  Processor::Parse(spirvWords);
+}
+
 ConstIter Debugger::GetIterForInstruction(uint32_t inst) const
 {
   return ConstIter(m_SPIRV, instructionOffsets[inst]);
@@ -442,8 +446,6 @@ void Reflector::CheckDebuggable(bool &debuggable, rdcstr &debugStatus) const
       "SPV_KHR_device_group",
       "SPV_KHR_expect_assume",
       "SPV_KHR_float_controls",
-      "SPV_KHR_fma",
-      "SPV_KHR_fragment_shading_rate",
       "SPV_KHR_maximal_reconvergence",
       "SPV_KHR_multiview",
       "SPV_KHR_no_integer_wrap_decoration",
@@ -452,11 +454,9 @@ void Reflector::CheckDebuggable(bool &debuggable, rdcstr &debugStatus) const
       "SPV_KHR_post_depth_coverage",
       "SPV_KHR_quad_control",
       "SPV_KHR_relaxed_extended_instruction",
-      "SPV_KHR_shader_abort",
       "SPV_KHR_shader_atomic_counter_ops",
       "SPV_KHR_shader_ballot",
       "SPV_KHR_shader_clock",
-      "SPV_KHR_shader_constant_data",
       "SPV_KHR_shader_draw_parameters",
       "SPV_KHR_storage_buffer_storage_class",
       "SPV_KHR_subgroup_rotate",
@@ -618,15 +618,11 @@ void Reflector::CheckDebuggable(bool &debuggable, rdcstr &debugStatus) const
       case Capability::SubgroupVoteKHR:
       case Capability::ComputeDerivativeGroupQuadsKHR:
       case Capability::ComputeDerivativeGroupLinearKHR:
+      // SPIR-V 1.6 / SPV_KHR_integer_dot_product
       case Capability::DotProduct:
       case Capability::DotProductInput4x8Bit:
       case Capability::DotProductInput4x8BitPacked:
       case Capability::DotProductInputAll:
-      case Capability::AbortKHR:
-      case Capability::ConstantDataKHR:
-      case Capability::FMAKHR:
-      case Capability::Shader64BitIndexingEXT:
-      case Capability::FragmentShadingRateKHR:
       {
         supported = true;
         break;
@@ -673,8 +669,22 @@ void Reflector::CheckDebuggable(bool &debuggable, rdcstr &debugStatus) const
         break;
       }
 
+      // SPV_KHR_fma
+      case Capability::FMAKHR:
+      {
+        supported = false;
+        break;
+      }
+
       // SPV_KHR_fragment_shader_barycentric
       case Capability::FragmentBarycentricKHR:
+      {
+        supported = false;
+        break;
+      }
+
+      // SPV_KHR_fragment_shading_rate
+      case Capability::FragmentShadingRateKHR:
       {
         supported = false;
         break;
@@ -711,8 +721,7 @@ void Reflector::CheckDebuggable(bool &debuggable, rdcstr &debugStatus) const
       case Capability::RayTracingKHR:
       case Capability::RayTracingPositionFetchKHR:
       case Capability::RayTraversalPrimitiveCullingKHR:
-      case Capability::RayTracingOpacityMicromapKHR:
-      case Capability::RayTracingOpacityMicromapExecutionModeKHR:
+      case Capability::RayTracingOpacityMicromapEXT:
       {
         supported = false;
         break;
@@ -734,8 +743,14 @@ void Reflector::CheckDebuggable(bool &debuggable, rdcstr &debugStatus) const
         break;
       }
 
-      // SPV_EXT_replicated_composites
       case Capability::ReplicatedCompositesEXT:
+      {
+        supported = false;
+        break;
+      }
+
+      // SPV_EXT_shader_64bit_indexing
+      case Capability::Shader64BitIndexingEXT:
       {
         supported = false;
         break;
@@ -773,13 +788,6 @@ void Reflector::CheckDebuggable(bool &debuggable, rdcstr &debugStatus) const
 
       // SPV_EXT_descriptor_heap
       case Capability::DescriptorHeapEXT:
-      {
-        supported = false;
-        break;
-      }
-
-      // SPV_KHR_poison_freeze
-      case Capability::PoisonFreezeKHR:
       {
         supported = false;
         break;
@@ -853,7 +861,7 @@ void Reflector::CheckDebuggable(bool &debuggable, rdcstr &debugStatus) const
       case Capability::DebugInfoModuleINTEL:
       case Capability::BindlessTextureNV:
       case Capability::MemoryAccessAliasingINTEL:
-      case Capability::SplitBarrierEXT:
+      case Capability::SplitBarrierINTEL:
       case Capability::GroupUniformArithmeticKHR:
       case Capability::CoreBuiltinsARM:
       case Capability::FPGADSPControlALTERA:
@@ -919,22 +927,6 @@ void Reflector::CheckDebuggable(bool &debuggable, rdcstr &debugStatus) const
       case Capability::RayTracingNV:
       case Capability::ShaderInvocationReorderNV:
       case Capability::PushConstantBanksNV:
-      case Capability::MultipleWaitQueuesQCOM:
-      case Capability::Float6EXT:
-      case Capability::Float4EXT:
-      case Capability::Float8UnsignedE8M0EXT:
-      case Capability::MXInt8EXT:
-      case Capability::DotProductBFloat16AccVALVE:
-      case Capability::DotProductFloat16AccFloat16VALVE:
-      case Capability::DotProductFloat16AccFloat32VALVE:
-      case Capability::DotProductFloat8AccFloat32VALVE:
-      case Capability::WeakLinkageAMD:
-      case Capability::PredicatedIOINTEL:
-      case Capability::RoundedDivideSqrtINTEL:
-      case Capability::ImageGatherLinearQCOM:
-      case Capability::ImageGatherExtendedModesQCOM:
-      case Capability::CooperativeMatrixDecodeVectorNV:
-      case Capability::BitcastExtractEXT:
       case Capability::Max:
       case Capability::Invalid:
       {
@@ -1112,9 +1104,6 @@ ShaderDebugTrace *Debugger::BeginDebug(DebugAPIWrapper *api, const ShaderStage s
   {
     Constant &c = it->second;
 
-    if(c.op == Op::ConstantDataKHR || c.op == Op::SpecConstantDataKHR)
-      continue;
-
     const DataType *typeWalk = &dataTypes[c.type];
     SetStructArrayNames(c.value, typeWalk, specInfo);
   }
@@ -1122,11 +1111,6 @@ ShaderDebugTrace *Debugger::BeginDebug(DebugAPIWrapper *api, const ShaderStage s
   // evaluate all constants
   for(auto it = constants.begin(); it != constants.end(); it++)
   {
-    Constant &c = it->second;
-
-    if(c.op == Op::ConstantDataKHR || c.op == Op::SpecConstantDataKHR)
-      continue;
-
     active.ids[it->first] = EvaluateConstant(it->first, specInfo);
     active.ids[it->first].name = GetRawName(it->first);
   }
@@ -1274,9 +1258,7 @@ ShaderDebugTrace *Debugger::BeginDebug(DebugAPIWrapper *api, const ShaderStage s
           if(curDecorations.flags & Decorations::HasBuiltIn)
             builtin = MakeShaderBuiltin(stage, curDecorations.builtIn);
 
-          // Only set inputs for active lanes
-          if(apiWrapper->GetThreadProperty(laneIndex, ThreadProperty::Active) != 0)
-            this->apiWrapper->FillInputValue(var, builtin, laneIndex, (uint32_t)location, component);
+          this->apiWrapper->FillInputValue(var, builtin, laneIndex, (uint32_t)location, component);
         }
         else
         {
@@ -1403,50 +1385,8 @@ ShaderDebugTrace *Debugger::BeginDebug(DebugAPIWrapper *api, const ShaderStage s
           var.rows = 1;
           var.columns = 1;
           var.type = VarType::ReadWriteResource;
-          enablePointerFlags(var, PointerFlags::SSBO);
 
           int32_t idx = patchData.rwInterface.indexOf(v.id);
-
-          // GL SSBO Arrays
-          if((api->GetGraphicsAPI() == GraphicsAPI::OpenGL) && isArray)
-          {
-            enablePointerFlags(var, PointerFlags::StructArrayBinding);
-            for(uint32_t i = 0; i < arraySize; ++i)
-            {
-              ShaderVariable member;
-
-              member.rows = 1;
-              member.columns = 1;
-              member.name = StringFormat::Fmt("[%u]", i);
-              member.type = VarType::ReadWriteResource;
-              enablePointerFlags(member, PointerFlags::SSBO);
-
-              // Bind to index "idx+i" because GL resource arrays are expanded in element order
-              if(idx >= 0)
-                member.SetBindIndex(
-                    ShaderBindIndex(DescriptorCategory::ReadWriteResource, idx + i, 0));
-              else
-                member.SetBindIndex(ShaderBindIndex());
-
-              var.members.push_back(member);
-
-              // Source mapping per array element because GL resource arrays are expanded
-              SourceVariableMapping srcVar;
-              srcVar.name = StringFormat::Fmt("%s[%u]", sourceName.c_str(), i);
-              srcVar.type = var.members[i].type;
-              srcVar.rows = 1;
-              srcVar.columns = 1;
-              srcVar.offset = 0;
-              srcVar.variables.push_back(
-                  DebugVariableReference(DebugVariableType::ReadWriteResource,
-                                         StringFormat::Fmt("%s[%u]", var.name.c_str(), i)));
-              ret->sourceVars.push_back(srcVar);
-            }
-
-            global.readWriteResources.push_back(var);
-            pointerIDs.push_back(GLOBAL_POINTER(v.id, readWriteResources));
-            continue;
-          }
 
           // on GL we may have buffers which are dead-code eliminated but remain part of the simulated
           // code. Because we base our interfaces off the GLSL reflected data it may not be present
@@ -1457,6 +1397,8 @@ ShaderDebugTrace *Debugger::BeginDebug(DebugAPIWrapper *api, const ShaderStage s
 
           if(api->GetGraphicsAPI() == GraphicsAPI::Vulkan)
             RDCASSERT(idx >= 0);
+
+          enablePointerFlags(var, PointerFlags::SSBO);
 
           if(isArray)
             enablePointerFlags(var, PointerFlags::GlobalArrayBinding);
@@ -1475,17 +1417,15 @@ ShaderDebugTrace *Debugger::BeginDebug(DebugAPIWrapper *api, const ShaderStage s
           ShaderBindIndex binding;
 
           binding.category = DescriptorCategory::ConstantBlock;
-          int32_t idx = patchData.cblockInterface.indexOf(v.id);
+          binding.index = patchData.cblockInterface.indexOf(v.id);
 
           // on GL we may have buffers which are dead-code eliminated but remain part of the simulated
           // code. Because we base our interfaces off the GLSL reflected data it may not be present
-          if(idx >= 0)
-            binding.index = idx;
-          else
+          if(binding.index == ~0U)
             binding = ShaderBindIndex();
 
           if(api->GetGraphicsAPI() == GraphicsAPI::Vulkan)
-            RDCASSERT(idx >= 0);
+            RDCASSERT(binding.index != ~0U);
 
           auto cbufferCallback = [this, &binding](
                                      ShaderVariable &var, const Decorations &curDecorations,
@@ -1553,56 +1493,29 @@ ShaderDebugTrace *Debugger::BeginDebug(DebugAPIWrapper *api, const ShaderStage s
             }
           };
 
-          if(!isArray)
+          if(isArray)
           {
-            WalkVariable<ShaderVariable, true>(decorations[v.id], *innertype, 0U, false, var,
-                                               rdcstr(), cbufferCallback);
+            if(arraySize == ~0U)
+            {
+              RDCERR("Unsupported runtime array of UBOs");
+              arraySize = 1;
+            }
+
+            var.members.reserve(arraySize);
+
+            for(uint32_t a = 0; a < arraySize; a++)
+            {
+              binding.arrayElement = a;
+              var.members.push_back(ShaderVariable());
+              var.members.back().name = StringFormat::Fmt("[%u]", a);
+              WalkVariable<ShaderVariable, true>(decorations[v.id], *innertype, 0U, false,
+                                                 var.members.back(), rdcstr(), cbufferCallback);
+            }
           }
           else
           {
-            var.rows = 1;
-            var.columns = 1;
-            var.type = VarType::ConstantBlock;
-
-            // GL UBO Arrays
-            if((api->GetGraphicsAPI() == GraphicsAPI::OpenGL))
-            {
-              enablePointerFlags(var, PointerFlags::StructArrayBinding);
-              for(uint32_t i = 0; i < arraySize; ++i)
-              {
-                ShaderVariable member;
-
-                member.rows = 1;
-                member.columns = 1;
-                member.name = StringFormat::Fmt("[%u]", i);
-                member.type = VarType::ConstantBlock;
-
-                // Bind to index "idx+i" because GL resource arrays are expanded in element order
-                if(idx >= 0)
-                  member.SetBindIndex(ShaderBindIndex(DescriptorCategory::ConstantBlock, idx + i, 0));
-                else
-                  member.SetBindIndex(ShaderBindIndex());
-
-                var.members.push_back(member);
-
-                // Source mapping per array element because GL resource arrays are expanded
-                SourceVariableMapping srcVar;
-                srcVar.name = StringFormat::Fmt("%s[%u]", sourceName.c_str(), i);
-                srcVar.type = var.members[i].type;
-                srcVar.rows = 1;
-                srcVar.columns = 1;
-                srcVar.offset = 0;
-                srcVar.variables.push_back(DebugVariableReference(
-                    DebugVariableType::Constant, StringFormat::Fmt("%s[%u]", var.name.c_str(), i)));
-                ret->sourceVars.push_back(srcVar);
-              }
-
-              global.constantBlocks.push_back(var);
-              pointerIDs.push_back(GLOBAL_POINTER(v.id, constantBlocks));
-              continue;
-            }
-            enablePointerFlags(var, PointerFlags::GlobalArrayBinding);
-            var.SetBindIndex(binding);
+            WalkVariable<ShaderVariable, true>(decorations[v.id], *innertype, 0U, false, var,
+                                               rdcstr(), cbufferCallback);
           }
 
           sourceVar.type = VarType::ConstantBlock;
@@ -1739,7 +1652,7 @@ ShaderDebugTrace *Debugger::BeginDebug(DebugAPIWrapper *api, const ShaderStage s
           else if(memberType == VarType::ReadWriteResource)
             idx = patchData.rwInterface.indexOf(v.id);
 
-          uint32_t len = EvaluateConstant(innertype->length, specInfo).value.u32v[0];
+          uint32_t len = uintComp(GetActiveLane().ids[innertype->length], 0);
           for(uint32_t i = 0; i < len; ++i)
           {
             ShaderVariable member;
@@ -2212,36 +2125,14 @@ void Debugger::FillCallstack(ThreadState &thread, ShaderDebugState &state) const
 
 void Debugger::FillDebugSourceVars(rdcarray<InstructionSourceInfo> &instInfo) const
 {
-  const ScopeData *prevScope = NULL;
-  size_t prevScopeNumMappings = 0;
-
-  for(size_t i = 0; i < instInfo.size(); i++)
+  for(InstructionSourceInfo &i : instInfo)
   {
-    InstructionSourceInfo &inst = instInfo[i];
-
-    size_t offs = instructionOffsets[inst.instruction];
+    size_t offs = instructionOffsets[i.instruction];
 
     const ScopeData *scope = GetScope(offs);
 
     if(!scope)
-    {
-      prevScope = NULL;
       continue;
-    }
-
-    // if we're in the same scope as the last instruction
-    if(scope == prevScope)
-    {
-      // and no new mappings are available in this instruction compared to last time
-      if(prevScopeNumMappings < scope->localMappings.size() &&
-         scope->localMappings[prevScopeNumMappings].instIndex > inst.instruction)
-      {
-        // we will get the same result - just copy.
-        // i must be > 0 here because prevScope is NULL on i = 0
-        inst.sourceVars = instInfo[i - 1].sourceVars;
-        continue;
-      }
-    }
 
     // track which mappings we've processed, so if the same variable has mappings in multiple scopes
     // we only pick the innermost.
@@ -2260,8 +2151,6 @@ void Debugger::FillDebugSourceVars(rdcarray<InstructionSourceInfo> &instInfo) co
       scope = scope->parent;
     }
 
-    prevScope = scope;
-
     // Iterate over the scopes downwards (parent->child)
     for(size_t s = 0; s < scopes.size(); ++s)
     {
@@ -2271,12 +2160,8 @@ void Debugger::FillDebugSourceVars(rdcarray<InstructionSourceInfo> &instInfo) co
         const LocalMapping &mapping = scope->localMappings[m];
 
         // if this mapping is past the current instruction, stop here.
-        if(mapping.instIndex > inst.instruction)
-        {
-          if(s == scopes.size() - 1)
-            prevScopeNumMappings = m;
+        if(mapping.instIndex > i.instruction)
           break;
-        }
 
         // see if this mapping is superceded by a later mapping in this scope for this instruction.
         // This is a bit inefficient but simple. The alternative would be to do record
@@ -2288,7 +2173,7 @@ void Debugger::FillDebugSourceVars(rdcarray<InstructionSourceInfo> &instInfo) co
           const LocalMapping &laterMapping = scope->localMappings[n];
 
           // if this mapping is past the current instruction, stop here.
-          if(laterMapping.instIndex > inst.instruction)
+          if(laterMapping.instIndex > i.instruction)
             break;
 
           // if this mapping will supercede and starts later
@@ -2532,8 +2417,7 @@ void Debugger::FillDebugSourceVars(rdcarray<InstructionSourceInfo> &instInfo) co
                 usage->children.resize(rows);
                 for(uint32_t x = 0; x < rows; x++)
                 {
-                  rdcstr suffix = typeWalk->structMembers[x].first;
-                  suffix.insert(0, '.');
+                  rdcstr suffix = StringFormat::Fmt(".%s", typeWalk->structMembers[x].first.c_str());
                   usage->children[x].debugVar = usage->debugVar;
                   usage->children[x].debugVarSuffix = usage->debugVarSuffix + suffix;
                   usage->children[x].name = usage->name + suffix;
@@ -2866,18 +2750,17 @@ void Debugger::FillDebugSourceVars(rdcarray<InstructionSourceInfo> &instInfo) co
           }
         }
       }
-      size_t baseSize = inst.sourceVars.size();
-      inst.sourceVars.resize(baseSize + sourceVarNodes.size());
       for(size_t x = 0; x < sourceVarNodes.size(); ++x)
       {
         const DebugVarNode *n = sourceVarNodes[x];
-        SourceVariableMapping &sourceVar = inst.sourceVars[baseSize + x];
+        SourceVariableMapping sourceVar;
         sourceVar.name = n->name;
         sourceVar.type = n->type;
         sourceVar.rows = n->rows;
         sourceVar.columns = n->columns;
         sourceVar.signatureIndex = -1;
         sourceVar.offset = n->offset;
+        sourceVar.variables.clear();
         // unknown is treated as a struct
         if(sourceVar.type == VarType::Unknown)
           sourceVar.type = VarType::Struct;
@@ -2886,38 +2769,34 @@ void Debugger::FillDebugSourceVars(rdcarray<InstructionSourceInfo> &instInfo) co
         {
           ConstIter it = GetID(n->debugVar);
 
-          rdcstr debugVarName = GetRawName(n->debugVar) + n->debugVarSuffix;
-
           if(it.opcode() == Op::Undef)
           {
             sourceVar.rows = sourceVar.columns = 1;
             sourceVar.undefinedValue = true;
 
-            sourceVar.variables.push_back(
-                DebugVariableReference(DebugVariableType::Variable, debugVarName, 0));
+            sourceVar.variables.push_back(DebugVariableReference(
+                DebugVariableType::Variable, GetRawName(n->debugVar) + n->debugVarSuffix, 0));
           }
           else
           {
             RDCASSERTNOTEQUAL(n->rows * n->columns, 0);
-            sourceVar.variables.resize(n->rows * n->columns);
             for(uint32_t c = 0; c < n->rows * n->columns; ++c)
             {
-              sourceVar.variables[c].type = DebugVariableType::Variable;
-              sourceVar.variables[c].name = debugVarName;
-              sourceVar.variables[c].component = c;
+              sourceVar.variables.push_back(DebugVariableReference(
+                  DebugVariableType::Variable, GetRawName(n->debugVar) + n->debugVarSuffix, c));
             }
           }
         }
         else
         {
           RDCASSERTEQUAL(n->rows * n->columns, (uint32_t)n->children.count());
-          sourceVar.variables.reserve(n->children.size());
           for(int32_t c = 0; c < n->children.count(); ++c)
             sourceVar.variables.push_back(DebugVariableReference(
                 DebugVariableType::Variable,
                 GetRawName(n->children[c].debugVar) + n->children[c].debugVarSuffix,
                 n->children[c].debugVarComponent));
         }
+        i.sourceVars.push_back(sourceVar);
       }
     }
   }
@@ -2953,7 +2832,13 @@ void Debugger::FillDefaultSourceVars(rdcarray<InstructionSourceInfo> &instInfo) 
     // one exists.
     if(id != Id() && idLiveRange[id].first == offs)
     {
-      rdcstr name = strings[id];
+      rdcstr name;
+
+      auto dyn = dynamicNames.find(id);
+      if(dyn != dynamicNames.end())
+        name = dyn->second;
+      else
+        name = strings[id];
 
       if(!name.empty())
       {
@@ -3345,7 +3230,7 @@ ShaderVariable Debugger::MakePointerVariable(Id id, const ShaderVariable *v, uin
 }
 
 ShaderVariable Debugger::MakeCompositePointer(const ShaderVariable &base, Id id,
-                                              const rdcarray<uint32_t> &indices) const
+                                              rdcarray<uint32_t> &indices) const
 {
   const ShaderVariable *leaf = &base;
 
@@ -3365,7 +3250,7 @@ ShaderVariable Debugger::MakeCompositePointer(const ShaderVariable &base, Id id,
   // We only take this if this is the FIRST dereference from the global pointer.
   // If the SPIR-V does something like structType *_1234 =
   if((leaf->type == VarType::ReadWriteResource || leaf->type == VarType::ReadOnlyResource ||
-      leaf->type == VarType::Sampler || leaf->type == VarType::ConstantBlock) &&
+      leaf->type == VarType::Sampler) &&
      checkPointerFlags(*leaf, PointerFlags::GlobalArrayBinding) &&
      getBufferTypeId(base) == rdcspv::Id())
   {
@@ -3373,13 +3258,11 @@ ShaderVariable Debugger::MakeCompositePointer(const ShaderVariable &base, Id id,
   }
 
   if((leaf->type == VarType::ReadWriteResource && checkPointerFlags(*leaf, PointerFlags::SSBO)) ||
-     physicalPointer || leaf->type == VarType::ConstantBlock)
+     physicalPointer)
   {
     ShaderVariable ret;
     uint64_t byteOffset = 0;
     const DataType *type = NULL;
-
-    bool isStructArray = checkPointerFlags(*leaf, PointerFlags::StructArrayBinding);
 
     if(physicalPointer)
     {
@@ -3398,23 +3281,13 @@ ShaderVariable Debugger::MakeCompositePointer(const ShaderVariable &base, Id id,
     }
     else
     {
+      ret = MakePointerVariable(id, leaf);
+
+      byteOffset = getByteOffset(base);
       type = &dataTypes[idTypes[id]];
 
       RDCASSERT(type->type == DataType::PointerType);
       type = &dataTypes[type->InnerType()];
-
-      if(isStructArray)
-      {
-        // First index is the member index into the struct_array
-        leaf = &leaf->members[indices[0]];
-
-        RDCASSERT(type->type == DataType::ArrayType);
-        type = &dataTypes[type->InnerType()];
-        id = type->id;
-      }
-      ret = MakePointerVariable(id, leaf);
-
-      byteOffset = getByteOffset(base);
     }
 
     setMatrixStride(ret, getMatrixStride(base));
@@ -3433,10 +3306,6 @@ ShaderVariable Debugger::MakeCompositePointer(const ShaderVariable &base, Id id,
     {
       setBindArrayIndex(ret, indices[i++]);
       type = &dataTypes[type->InnerType()];
-    }
-    else if(isStructArray)
-    {
-      i++;
     }
     else
     {
@@ -3458,8 +3327,7 @@ ShaderVariable Debugger::MakeCompositePointer(const ShaderVariable &base, Id id,
 
         // offset increases by index * arrayStride
         arrayStride = dec.arrayStride;
-        // ensure calculation is done at 64-bit precision
-        byteOffset += indices[i] * uint64_t(arrayStride);
+        byteOffset += indices[i] * arrayStride;
 
         // new type is the inner type
         type = &dataTypes[type->InnerType()];
@@ -3713,8 +3581,7 @@ DeviceOpResult Debugger::ReadFromPointer(const ShaderVariable &ptr, ShaderVariab
       ret = ShaderVariable(ptr.name, 0, 0, 0, 0);
       return DeviceOpResult::Succeeded;
     }
-    if((inner->type == VarType::ReadWriteResource && checkPointerFlags(*inner, PointerFlags::SSBO)) ||
-       (inner->type == VarType::ConstantBlock))
+    if(inner->type == VarType::ReadWriteResource && checkPointerFlags(*inner, PointerFlags::SSBO))
     {
       typeId = getBufferTypeId(ptr);
       byteOffset = getByteOffset(ptr);
@@ -3809,10 +3676,6 @@ DeviceOpResult Debugger::ReadFromPointer(const ShaderVariable &ptr, ShaderVariab
           if(it != idToPointerType.end())
           {
             var.SetTypedPointer(var.value.u64v[0], this->apiWrapper->GetShaderID(), it->second);
-            if(dec.flags & Decorations::HasMatrixStride)
-              setMatrixStride(var, dec.matrixStride);
-            if(dec.flags & Decorations::HasArrayStride)
-              setArrayStride(var, dec.arrayStride);
           }
           else
           {
@@ -3820,8 +3683,6 @@ DeviceOpResult Debugger::ReadFromPointer(const ShaderVariable &ptr, ShaderVariab
             enablePointerFlags(var, PointerFlags::DereferencedPhysical);
             setMatrixStride(var, matrixStride);
             setBufferTypeId(var, type.InnerType());
-            if(dec.flags & Decorations::HasArrayStride)
-              setArrayStride(var, dec.arrayStride);
           }
         }
       }
@@ -3843,7 +3704,7 @@ DeviceOpResult Debugger::ReadFromPointer(const ShaderVariable &ptr, ShaderVariab
   ret.name = ptr.name;
 
   if(inner->type == VarType::ReadOnlyResource || inner->type == VarType::ReadWriteResource ||
-     inner->type == VarType::Sampler || inner->type == VarType::ConstantBlock)
+     inner->type == VarType::Sampler)
   {
     bind = ret.GetBindIndex();
     bind.arrayElement = getBindArrayIndex(ptr);
@@ -3924,7 +3785,7 @@ bool Debugger::IsOpaquePointer(const ShaderVariable &ptr) const
 
   const ShaderVariable *inner = getPointer(ptr);
   return inner->type == VarType::ReadOnlyResource || inner->type == VarType::Sampler ||
-         inner->type == VarType::ReadWriteResource || inner->type == VarType::ConstantBlock;
+         inner->type == VarType::ReadWriteResource;
 }
 
 bool Debugger::IsPhysicalPointer(const ShaderVariable &ptr) const
@@ -4138,12 +3999,39 @@ DeviceOpResult Debugger::WriteThroughPointer(ShaderVariable &ptr, const ShaderVa
 
 rdcstr Debugger::GetHumanName(Id id) const
 {
+  {
+    SCOPED_READLOCK(dynamicNamesLock);
+    // see if we have a dynamic name assigned (to disambiguate), if so use that
+    auto it = dynamicNames.find(id);
+    if(it != dynamicNames.end())
+      return it->second;
+  }
+
   // otherwise try the string first
   rdcstr name = strings[id];
 
   // if we don't have a string name, we can be sure the id is unambiguous
   if(name.empty())
     return GetRawName(id);
+
+  rdcstr basename = name;
+
+  // otherwise check to see if it's been used before. If so give it a new name
+  {
+    SCOPED_READLOCK(dynamicNamesLock);
+    int alias = 2;
+    while(usedNames.find(name) != usedNames.end())
+    {
+      name = basename + "@" + ToStr(alias);
+      alias++;
+    }
+  }
+
+  {
+    SCOPED_WRITELOCK(dynamicNamesLock);
+    usedNames.insert(name);
+    dynamicNames[id] = name;
+  }
 
   return name;
 }
@@ -4939,10 +4827,9 @@ void Debugger::RegisterOp(Iter it)
 
   // if we're explicitly leaving the scope because of a DebugNoScope, or if we're leaving due to the
   // end of a block then set scope to NULL now.
-  if(leaveScope || it.opcode() == Op::Kill || it.opcode() == Op::TerminateInvocation ||
-     it.opcode() == Op::AbortKHR || it.opcode() == Op::Unreachable || it.opcode() == Op::Branch ||
-     it.opcode() == Op::BranchConditional || it.opcode() == Op::Switch ||
-     it.opcode() == Op::Return || it.opcode() == Op::ReturnValue)
+  if(leaveScope || it.opcode() == Op::Kill || it.opcode() == Op::Unreachable ||
+     it.opcode() == Op::Branch || it.opcode() == Op::BranchConditional ||
+     it.opcode() == Op::Switch || it.opcode() == Op::Return || it.opcode() == Op::ReturnValue)
   {
     if(m_DebugInfo.curScope)
       m_DebugInfo.curScope->end = it.offs();
@@ -4962,21 +4849,8 @@ void Debugger::RegisterOp(Iter it)
     OpName name(it);
 
     // technically you could name a string - in that case we ignore the name
-    if(strings[name.target].empty() && !name.name.empty())
-    {
-      rdcstr nameStr = name.name;
-
-      int alias = 2;
-      while(usedNames.find(nameStr) != usedNames.end())
-      {
-        nameStr = name.name + "@" + ToStr(alias);
-        alias++;
-      }
-
-      usedNames.insert(nameStr);
-
-      strings[name.target] = nameStr;
-    }
+    if(strings[name.target].empty())
+      strings[name.target] = name.name;
   }
   else if(opdata.op == Op::MemberName)
   {
@@ -5108,7 +4982,7 @@ void Debugger::ProcessQueuedGpuMathOps()
       const GpuMathOperation &mathOp = workgroup[lane].GetQueuedGpuMathOp();
 
       uint32_t workgroupIndex = mathOp.workgroupIndex;
-      if(apiWrapper->QueueCalculateMathOp(mathOp.opcode, mathOp.glslop, mathOp.paramVars))
+      if(apiWrapper->QueueCalculateMathOp(mathOp.op, mathOp.paramVars))
       {
         pendingGpuMathsOpsResults.push_back(mathOp.result);
       }

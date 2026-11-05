@@ -30,6 +30,7 @@
 #include <QScrollBar>
 #include <QXmlStreamWriter>
 #include "Code/Resources.h"
+#include "Widgets/ComputeDebugSelector.h"
 #include "Widgets/Extended/RDHeaderView.h"
 #include "flowlayout/FlowLayout.h"
 #include "toolwindowmanager/ToolWindowManager.h"
@@ -140,6 +141,8 @@ VulkanPipelineStateViewer::VulkanPipelineStateViewer(ICaptureContext &ctx,
     : QFrame(parent), ui(new Ui::VulkanPipelineStateViewer), m_Ctx(ctx), m_Common(common)
 {
   ui->setupUi(this);
+
+  m_ComputeDebugSelector = new ComputeDebugSelector(this);
 
   const QIcon &action = Icons::action();
   const QIcon &action_hover = Icons::action_hover();
@@ -259,10 +262,8 @@ VulkanPipelineStateViewer::VulkanPipelineStateViewer(ICaptureContext &ctx,
   ui->tsDescGroup->setCollapsed(true);
   ui->msDescGroup->setCollapsed(true);
 
-  QObject::connect(ui->computeDebugSelector, &QToolButton::clicked, &m_Common,
-                   &PipelineStateViewer::computeDebugSelector_clicked);
-  QObject::connect(ui->pixelDebugSelector, &QToolButton::clicked, &m_Common,
-                   &PipelineStateViewer::pixelDebugSelector_clicked);
+  QObject::connect(m_ComputeDebugSelector, &ComputeDebugSelector::beginDebug, this,
+                   &VulkanPipelineStateViewer::computeDebugSelector_beginDebug);
 
   for(QToolButton *b : editButtons)
     QObject::connect(b, &QToolButton::clicked, &m_Common, &PipelineStateViewer::shaderEdit_clicked);
@@ -565,6 +566,7 @@ VulkanPipelineStateViewer::~VulkanPipelineStateViewer()
 {
   m_CombinedImageSamplers.clear();
   delete ui;
+  delete m_ComputeDebugSelector;
 }
 
 void VulkanPipelineStateViewer::OnCaptureLoaded()
@@ -724,18 +726,16 @@ bool VulkanPipelineStateViewer::setViewDetails(RDTreeWidgetItem *node, const Des
       viewdetails = true;
     }
 
-    uint32_t effectiveDepth = qMax(1U, tex->depth >> descriptor.firstMip);
-
-    if(effectiveDepth > 1 && ((effectiveDepth != descriptor.numSlices && descriptor.numSlices > 0) ||
-                              descriptor.firstSlice > 0))
+    if(tex->depth > 1 && ((tex->depth != descriptor.numSlices && descriptor.numSlices > 0) ||
+                          descriptor.firstSlice > 0))
     {
       if(descriptor.numSlices == 1)
-        text += tr("The texture has %1 3D slices at first mip, the view covers slice %2.\n")
-                    .arg(effectiveDepth)
+        text += tr("The texture has %1 3D slices, the view covers slice %2.\n")
+                    .arg(tex->depth)
                     .arg(descriptor.firstSlice);
       else
-        text += tr("The texture has %1 3D slices at first mip, the view covers slices %2-%3.\n")
-                    .arg(effectiveDepth)
+        text += tr("The texture has %1 3D slices, the view covers slices %2-%3.\n")
+                    .arg(tex->depth)
                     .arg(descriptor.firstSlice)
                     .arg(descriptor.firstSlice + descriptor.numSlices - 1);
 
@@ -1113,7 +1113,6 @@ void VulkanPipelineStateViewer::clearState()
   ui->stencils->clear();
 
   ui->computeDebugSelector->setEnabled(false);
-  ui->pixelDebugSelector->setEnabled(false);
 
   ui->conditionalRenderingGroup->setVisible(false);
   ui->csConditionalRenderingGroup->setVisible(false);
@@ -2353,10 +2352,7 @@ void VulkanPipelineStateViewer::setState()
                   return aBind.second < bBind.second;
 
                 // for non-sets, sort by interface index
-                if(a.access.index != b.access.index)
-                  return a.access.index < b.access.index;
-
-                return a.access.arrayElement < b.access.arrayElement;
+                return a.access.index < b.access.index;
               });
 
     for(const UsedDescriptor &used : descriptors)
@@ -2613,25 +2609,7 @@ void VulkanPipelineStateViewer::setState()
     ui->depthBias->setPixmap(QPixmap());
     ui->depthBiasClamp->setPixmap(QPixmap());
     ui->slopeScaledBias->setPixmap(QPixmap());
-
-    QString depthBiasText = Formatter::Format(state.rasterizer.depthBias);
-
-    if(state.rasterizer.depthBiasRepresentation == DepthBiasMode::ForceUNorm)
-    {
-      depthBiasText += tr(" (UNorm)");
-    }
-    else if(state.rasterizer.depthBiasRepresentation == DepthBiasMode::One)
-    {
-      depthBiasText += tr(" (Float)");
-    }
-
-    if(state.rasterizer.depthBiasExact)
-    {
-      depthBiasText += tr(" Exact");
-    }
-
-    ui->depthBias->setText(depthBiasText);
-
+    ui->depthBias->setText(Formatter::Format(state.rasterizer.depthBias));
     ui->depthBiasClamp->setText(Formatter::Format(state.rasterizer.depthBiasClamp));
     ui->slopeScaledBias->setText(Formatter::Format(state.rasterizer.slopeScaledDepthBias));
   }
@@ -3175,7 +3153,56 @@ void VulkanPipelineStateViewer::setState()
   ui->stencils->clearSelection();
   ui->stencils->endUpdate();
 
-  m_Common.SetupDebugSelectors(ui->computeDebugSelector, ui->pixelDebugSelector);
+  // set up thread debugging inputs
+  bool enableDebug = m_Ctx.APIProps().shaderDebugging && state.computeShader.reflection &&
+                     state.computeShader.reflection->debugInfo.debuggable && action &&
+                     (action->flags & ActionFlags::Dispatch);
+  if(enableDebug)
+  {
+    // Validate dispatch/threadgroup dimensions
+    enableDebug &= action->dispatchDimension[0] > 0;
+    enableDebug &= action->dispatchDimension[1] > 0;
+    enableDebug &= action->dispatchDimension[2] > 0;
+
+    const rdcfixedarray<uint32_t, 3> &threadDims =
+        (action->dispatchThreadsDimension[0] == 0)
+            ? state.computeShader.reflection->dispatchThreadsDimension
+            : action->dispatchThreadsDimension;
+    enableDebug &= threadDims[0] > 0;
+    enableDebug &= threadDims[1] > 0;
+    enableDebug &= threadDims[2] > 0;
+  }
+
+  if(enableDebug)
+  {
+    ui->computeDebugSelector->setEnabled(true);
+
+    // set maximums for CS debugging
+    m_ComputeDebugSelector->SetThreadBounds(
+        action->dispatchDimension, (action->dispatchThreadsDimension[0] == 0)
+                                       ? state.computeShader.reflection->dispatchThreadsDimension
+                                       : action->dispatchThreadsDimension);
+
+    ui->computeDebugSelector->setToolTip(
+        tr("Debug this compute shader by specifying group/thread ID or dispatch ID"));
+  }
+  else
+  {
+    ui->computeDebugSelector->setEnabled(false);
+
+    if(!m_Ctx.APIProps().shaderDebugging)
+      ui->computeDebugSelector->setToolTip(tr("This API does not support shader debugging"));
+    else if(!action || !(action->flags & ActionFlags::Dispatch))
+      ui->computeDebugSelector->setToolTip(tr("No dispatch selected"));
+    else if(!state.computeShader.reflection)
+      ui->computeDebugSelector->setToolTip(tr("No compute shader bound"));
+    else if(!state.computeShader.reflection->debugInfo.debuggable)
+      ui->computeDebugSelector->setToolTip(
+          tr("This shader doesn't support debugging: %1")
+              .arg(state.computeShader.reflection->debugInfo.debugStatus));
+    else
+      ui->computeDebugSelector->setToolTip(tr("Invalid dispatch/threadgroup dimensions."));
+  }
 }
 
 void VulkanPipelineStateViewer::resource_itemActivated(RDTreeWidgetItem *item, int column)
@@ -3639,8 +3666,8 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
           length = buf->length;
       }
 
-      rows.push_back({i, m_Ctx.GetResourceName(vb.resourceId), (qulonglong)vb.byteOffset,
-                      (qulonglong)vb.byteStride, (qulonglong)length});
+      rows.push_back({i, vb.resourceId, (qulonglong)vb.byteOffset, (qulonglong)vb.byteStride,
+                      (qulonglong)length});
 
       i++;
     }
@@ -3697,10 +3724,6 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
 {
   const ShaderReflection *shaderDetails = sh.reflection;
 
-  const VKPipe::Pipeline &pipeline =
-      (sh.stage == ShaderStage::Compute ? m_Ctx.CurVulkanPipelineState()->compute
-                                        : m_Ctx.CurVulkanPipelineState()->graphics);
-
   {
     xml.writeStartElement(lit("h3"));
     xml.writeCharacters(tr("Shader"));
@@ -3713,23 +3736,22 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
     else
       shadername = m_Ctx.GetResourceName(sh.resourceId);
 
-    QString entryname = tr("Unknown");
     if(shaderDetails)
     {
       QString entryFunc = shaderDetails->entryPoint;
       const ShaderDebugInfo &dbg = shaderDetails->debugInfo;
       int entryFile = qMax(0, dbg.entryLocation.fileIndex);
-      if(!dbg.files.isEmpty())
-        entryname = QFormatStr("%1() - %2")
-                        .arg(entryFunc)
-                        .arg(QFileInfo(dbg.files[entryFile].filename).fileName());
-      else
-        entryname = QFormatStr("%1()").arg(entryFunc);
+      if(entryFunc != lit("main"))
+        shadername = QFormatStr("%1()").arg(entryFunc);
+      else if(!dbg.files.isEmpty())
+        shadername = QFormatStr("%1() - %2")
+                         .arg(entryFunc)
+                         .arg(QFileInfo(dbg.files[entryFile].filename).fileName());
     }
 
-    m_Common.exportHTMLTable(
-        xml, {tr("Pipeline"), tr("Shader"), tr("Entry")},
-        {m_Ctx.GetResourceName(pipeline.pipelineResourceId), shadername, entryname});
+    xml.writeStartElement(lit("p"));
+    xml.writeCharacters(shadername);
+    xml.writeEndElement();
 
     if(sh.resourceId == ResourceId())
       return;
@@ -3737,6 +3759,10 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
 
   if(!shaderDetails)
     return;
+
+  const VKPipe::Pipeline &pipeline =
+      (sh.stage == ShaderStage::Compute ? m_Ctx.CurVulkanPipelineState()->compute
+                                        : m_Ctx.CurVulkanPipelineState()->graphics);
 
   QList<QVariantList> uboRows;
   QList<QVariantList> roRows;
@@ -3977,7 +4003,7 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
       }
 
       sampRows.push_back(
-          {slotname, m_Ctx.GetResourceName(descriptor.object), addressing, filter,
+          {slotname, addressing, filter,
            QFormatStr("%1 - %2")
                .arg(descriptor.minLOD == -FLT_MAX ? lit("0") : QString::number(descriptor.minLOD))
                .arg(descriptor.maxLOD == FLT_MAX ? lit("FLT_MAX")
@@ -4018,10 +4044,9 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
     xml.writeCharacters(tr("Samplers"));
     xml.writeEndElement();
 
-    m_Common.exportHTMLTable(xml,
-                             {tr("Binding"), tr("Sampler"), tr("Addressing"), tr("Filter"),
-                              tr("LOD Clamp"), tr("LOD Bias")},
-                             sampRows);
+    m_Common.exportHTMLTable(
+        xml, {tr("Binding"), tr("Addressing"), tr("Filter"), tr("LOD Clamp"), tr("LOD Bias")},
+        sampRows);
   }
 
   if(!uboRows.empty())
@@ -4090,9 +4115,8 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
     xml.writeEndElement();
 
     m_Common.exportHTMLTable(
-        xml, {tr("Fill Mode"), tr("Cull Mode"), tr("Front CCW"), tr("Provoking Vertex")},
-        {ToQStr(rs.fillMode), ToQStr(rs.cullMode), rs.frontCCW ? tr("Yes") : tr("No"),
-         rs.provokingVertexFirst ? tr("First") : tr("Last")});
+        xml, {tr("Fill Mode"), tr("Cull Mode"), tr("Front CCW")},
+        {ToQStr(rs.fillMode), ToQStr(rs.cullMode), rs.frontCCW ? tr("Yes") : tr("No")});
 
     xml.writeStartElement(lit("p"));
     xml.writeEndElement();
@@ -4112,52 +4136,16 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
     xml.writeStartElement(lit("p"));
     xml.writeEndElement();
 
-    m_Common.exportHTMLTable(
-        xml,
-        {tr("Depth Bias Enable"), tr("Depth Bias"), tr("Depth Bias Representation"),
-         tr("Depth Bias Exact"), tr("Depth Bias Clamp"), tr("Slope Scaled Bias"), tr("Line Width")},
-        {
-            rs.depthBiasEnable ? tr("Yes") : tr("No"),
-            Formatter::Format(rs.depthBias),
-            ToQStr(rs.depthBiasRepresentation),
-            rs.depthBiasExact ? tr("Yes") : tr("No"),
-            Formatter::Format(rs.depthBiasClamp),
-            Formatter::Format(rs.slopeScaledDepthBias),
-            Formatter::Format(rs.lineWidth),
-        });
-  }
-
-  {
-    xml.writeStartElement(lit("h3"));
-    xml.writeCharacters(tr("Line Stipple"));
-    xml.writeEndElement();
-
-    m_Common.exportHTMLTable(
-        xml, {tr("Factor"), tr("Pattern")},
-        {ToQStr(rs.lineStippleFactor), QString::number(rs.lineStipplePattern, 2)});
-  }
-
-  {
-    xml.writeStartElement(lit("h3"));
-    xml.writeCharacters(tr("Conservative Raster"));
-    xml.writeEndElement();
-
-    m_Common.exportHTMLTable(xml, {tr("Mode"), tr("Over-estimation size")},
-                             {ToQStr(rs.conservativeRasterization),
-                              Formatter::Format(rs.extraPrimitiveOverestimationSize)});
-  }
-
-  {
-    xml.writeStartElement(lit("h3"));
-    xml.writeCharacters(tr("Variable Shading Rate"));
-    xml.writeEndElement();
-
-    m_Common.exportHTMLTable(
-        xml, {tr("Pipeline Shading Rate"), tr("Combiners")},
-        {QFormatStr("%1x%2").arg(rs.pipelineShadingRate.first).arg(rs.pipelineShadingRate.second),
-         QFormatStr("%1, %2")
-             .arg(ToQStr(rs.shadingRateCombiners.first, GraphicsAPI::Vulkan))
-             .arg(ToQStr(rs.shadingRateCombiners.second, GraphicsAPI::Vulkan))});
+    m_Common.exportHTMLTable(xml,
+                             {tr("Depth Bias Enable"), tr("Depth Bias"), tr("Depth Bias Clamp"),
+                              tr("Slope Scaled Bias"), tr("Line Width")},
+                             {
+                                 rs.depthBiasEnable ? tr("Yes") : tr("No"),
+                                 Formatter::Format(rs.depthBias),
+                                 Formatter::Format(rs.depthBiasClamp),
+                                 Formatter::Format(rs.slopeScaledDepthBias),
+                                 Formatter::Format(rs.lineWidth),
+                             });
   }
 
   const VKPipe::MultiSample &msaa = m_Ctx.CurVulkanPipelineState()->multisample;
@@ -4484,23 +4472,6 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
       xml.writeEndElement();
     }
 
-    if(!pass.renderpass.multiviews.isEmpty())
-    {
-      QList<QVariantList> colors;
-
-      for(int i = 0; i < pass.renderpass.multiviews.count(); i++)
-        colors.push_back({pass.renderpass.multiviews[i]});
-
-      m_Common.exportHTMLTable(xml,
-                               {
-                                   tr("Multiview Mask"),
-                               },
-                               colors);
-
-      xml.writeStartElement(lit("p"));
-      xml.writeEndElement();
-    }
-
     if(pass.renderpass.depthstencilAttachment >= 0)
     {
       xml.writeStartElement(lit("p"));
@@ -4677,20 +4648,6 @@ const ShaderResource *VulkanPipelineStateViewer::exportDescriptorHTML(const Used
       viewParams += tr("Layers: %1-%2")
                         .arg(descriptor.firstSlice)
                         .arg(descriptor.firstSlice + descriptor.numSlices - 1);
-    }
-
-    if(descriptor.swizzle.red != TextureSwizzle::Red ||
-       descriptor.swizzle.green != TextureSwizzle::Green ||
-       descriptor.swizzle.blue != TextureSwizzle::Blue ||
-       descriptor.swizzle.alpha != TextureSwizzle::Alpha)
-    {
-      if(!viewParams.isEmpty())
-        viewParams += lit(", ");
-      viewParams += tr("swizzle[%1%2%3%4]")
-                        .arg(ToQStr(descriptor.swizzle.red))
-                        .arg(ToQStr(descriptor.swizzle.green))
-                        .arg(ToQStr(descriptor.swizzle.blue))
-                        .arg(ToQStr(descriptor.swizzle.alpha));
     }
   }
 
@@ -5504,4 +5461,97 @@ void VulkanPipelineStateViewer::on_meshView_clicked()
   if(!m_Ctx.HasMeshPreview())
     m_Ctx.ShowMeshPreview();
   ToolWindowManager::raiseToolWindow(m_Ctx.GetMeshPreview()->Widget());
+}
+
+void VulkanPipelineStateViewer::on_computeDebugSelector_clicked()
+{
+  // Check whether debugging is valid for this event before showing the dialog
+  if(!m_Ctx.APIProps().shaderDebugging)
+    return;
+
+  if(!m_Ctx.IsCaptureLoaded())
+    return;
+
+  const ActionDescription *action = m_Ctx.CurAction();
+
+  if(!action)
+    return;
+
+  const ShaderReflection *shaderDetails =
+      m_Ctx.CurPipelineState().GetShaderReflection(ShaderStage::Compute);
+
+  if(!shaderDetails)
+    return;
+
+  RDDialog::show(m_ComputeDebugSelector);
+}
+
+void VulkanPipelineStateViewer::computeDebugSelector_beginDebug(
+    const rdcfixedarray<uint32_t, 3> &group, const rdcfixedarray<uint32_t, 3> &thread)
+{
+  const ActionDescription *action = m_Ctx.CurAction();
+
+  if(!action)
+    return;
+
+  const ShaderReflection *shaderDetails =
+      m_Ctx.CurPipelineState().GetShaderReflection(ShaderStage::Compute);
+
+  if(!shaderDetails)
+    return;
+
+  struct threadSelect
+  {
+    rdcfixedarray<uint32_t, 3> g;
+    rdcfixedarray<uint32_t, 3> t;
+  } debugThread = {
+      // g[]
+      {group[0], group[1], group[2]},
+      // t[]
+      {thread[0], thread[1], thread[2]},
+  };
+
+  bool done = false;
+  ShaderDebugTrace *trace = NULL;
+
+  m_Ctx.Replay().AsyncInvoke([&trace, &done, debugThread](IReplayController *r) {
+    trace = r->DebugThread(debugThread.g, debugThread.t);
+
+    if(trace->debugger == NULL)
+    {
+      r->FreeTrace(trace);
+      trace = NULL;
+    }
+
+    done = true;
+  });
+
+  QString debugContext = lit("Group [%1,%2,%3] Thread [%4,%5,%6]")
+                             .arg(group[0])
+                             .arg(group[1])
+                             .arg(group[2])
+                             .arg(thread[0])
+                             .arg(thread[1])
+                             .arg(thread[2]);
+
+  // wait a short while before displaying the progress dialog (which won't show if we're already
+  // done by the time we reach it)
+  for(int i = 0; !done && i < 100; i++)
+    QThread::msleep(5);
+
+  ShowProgressDialog(this, tr("Debugging %1").arg(debugContext), [&done]() { return done; });
+
+  if(!trace)
+  {
+    RDDialog::critical(
+        this, tr("Error debugging"),
+        tr("Error debugging thread - make sure a valid group and thread is selected"));
+    return;
+  }
+
+  // viewer takes ownership of the trace
+  IShaderViewer *s = m_Ctx.DebugShader(
+      shaderDetails, m_Ctx.CurPipelineState().GetComputePipelineObject(), trace, debugContext);
+
+  m_Ctx.AddDockWindow(s->Widget(), DockReference::AddTo, this);
 }

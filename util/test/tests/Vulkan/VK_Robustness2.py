@@ -6,17 +6,15 @@ class VK_Robustness2(rdtest.TestCase):
     demos_test_name = 'VK_Robustness2'
 
     def check_capture(self):
-        action = self.find_action('vkCmdDraw')
+        action: rd.ActionDescription = self.find_action('vkCmdDraw')
 
-        assert action is not None
-
-        self.set_event(action.eventId, True)
+        self.controller.SetFrameEvent(action.eventId, True)
 
         self.check_triangle()
 
         rdtest.log.success('Triangle is rendered correctly')
 
-        vsin_ref: rdtest.MeshReference = {
+        vsin_ref = {
             0: {
                 'vtx': 0,
                 'idx': 0,
@@ -46,7 +44,7 @@ class VK_Robustness2(rdtest.TestCase):
 
         postvs_data = self.get_postvs(action, rd.MeshDataStage.VSOut, 0, action.numIndices)
 
-        postvs_ref: rdtest.MeshReference = {
+        postvs_ref = {
             0: {
                 'vtx': 0,
                 'idx': 0,
@@ -89,7 +87,7 @@ class VK_Robustness2(rdtest.TestCase):
                                                            cbuf.resource, cbuf.byteOffset, cbuf.byteSize))
 
             if cb.bufferBacked:
-                var_check.check('data').type(rd.VarType.Float).rows(1).cols(4).truncated()
+                var_check.check('data').type(rd.VarType.Float).rows(1).cols(4).value([0.0, 0.0, 0.0, 0.0])
             else:
                 val = [0, 0, 0, 0]
                 if self.find_action('robustBufferAccess2') is not None:
@@ -98,4 +96,5 @@ class VK_Robustness2(rdtest.TestCase):
                     val[0] = val[1] = 1000000
                 var_check.check('coord').type(rd.VarType.SInt).rows(1).cols(4).value(val)
 
-            rdtest.log.success(f'CBuffer {cb.name} at bindpoint {cb.fixedBindSetOrSpace}.{cb.fixedBindNumber}[0] contains the correct contents')
+            rdtest.log.success('CBuffer {} at bindpoint {}.{}[0] contains the correct contents'
+                               .format(cb.name, cb.fixedBindSetOrSpace, cb.fixedBindNumber))

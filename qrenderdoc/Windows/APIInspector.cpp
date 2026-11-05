@@ -180,22 +180,20 @@ void APIInspector::on_apiEvents_itemSelectionChanged()
 
   if(chunk && !chunk->metadata.callstack.isEmpty())
   {
-    ui->callstack->setUpdatesEnabled(false);
-    ui->callstack->clear();
-    ui->callstack->addItem(tr("Loading..."));
-
-    if(!m_Ctx.Replay().AsyncAccessInvoke([this, chunk](ICaptureAccess *access) {
-         rdcarray<rdcstr> stack = access->GetResolve(chunk->metadata.callstack);
-
-         GUIInvoke::call(this, [this, stack]() { addCallstack(stack); });
-       }))
+    if(m_Ctx.Replay().GetCaptureAccess())
     {
-      ui->callstack->clear();
-      ui->callstack->addItem(tr("Callstack resolution not available."));
-      ui->callstack->setUpdatesEnabled(true);
+      m_Ctx.Replay().AsyncInvoke([this, chunk](IReplayController *) {
+        rdcarray<rdcstr> stack =
+            m_Ctx.Replay().GetCaptureAccess()->GetResolve(chunk->metadata.callstack);
+
+        GUIInvoke::call(this, [this, stack]() { addCallstack(stack); });
+      });
     }
     else
     {
+      ui->callstack->setUpdatesEnabled(false);
+      ui->callstack->clear();
+      ui->callstack->addItem(tr("Callstack resolution not available."));
       ui->callstack->setUpdatesEnabled(true);
     }
   }

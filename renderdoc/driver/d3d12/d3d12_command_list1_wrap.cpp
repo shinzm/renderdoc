@@ -91,18 +91,19 @@ bool WrappedID3D12GraphicsCommandList::Serialise_AtomicCopyBufferUINT(
 
         m_Cmd->AddAction(action);
 
-        D3D12EventNode &eventNode = m_Cmd->GetLastEventNode();
+        D3D12ActionTreeNode &actionNode = m_Cmd->GetActionStack().back()->children.back();
 
         if(pSrcBuffer == pDstBuffer)
         {
-          eventNode.resourceUsage.push_back(make_rdcpair(GetResID(pSrcBuffer), ResourceUsage::Copy));
+          actionNode.resourceUsage.push_back(make_rdcpair(
+              GetResID(pSrcBuffer), EventUsage(actionNode.action.eventId, ResourceUsage::Copy)));
         }
         else
         {
-          eventNode.resourceUsage.push_back(
-              make_rdcpair(GetResID(pSrcBuffer), ResourceUsage::CopySrc));
-          eventNode.resourceUsage.push_back(
-              make_rdcpair(GetResID(pDstBuffer), ResourceUsage::CopyDst));
+          actionNode.resourceUsage.push_back(make_rdcpair(
+              GetResID(pSrcBuffer), EventUsage(actionNode.action.eventId, ResourceUsage::CopySrc)));
+          actionNode.resourceUsage.push_back(make_rdcpair(
+              GetResID(pDstBuffer), EventUsage(actionNode.action.eventId, ResourceUsage::CopyDst)));
         }
       }
     }
@@ -203,18 +204,19 @@ bool WrappedID3D12GraphicsCommandList::Serialise_AtomicCopyBufferUINT64(
 
         m_Cmd->AddAction(action);
 
-        D3D12EventNode &eventNode = m_Cmd->GetLastEventNode();
+        D3D12ActionTreeNode &actionNode = m_Cmd->GetActionStack().back()->children.back();
 
         if(pSrcBuffer == pDstBuffer)
         {
-          eventNode.resourceUsage.push_back(make_rdcpair(GetResID(pSrcBuffer), ResourceUsage::Copy));
+          actionNode.resourceUsage.push_back(make_rdcpair(
+              GetResID(pSrcBuffer), EventUsage(actionNode.action.eventId, ResourceUsage::Copy)));
         }
         else
         {
-          eventNode.resourceUsage.push_back(
-              make_rdcpair(GetResID(pSrcBuffer), ResourceUsage::CopySrc));
-          eventNode.resourceUsage.push_back(
-              make_rdcpair(GetResID(pDstBuffer), ResourceUsage::CopyDst));
+          actionNode.resourceUsage.push_back(make_rdcpair(
+              GetResID(pSrcBuffer), EventUsage(actionNode.action.eventId, ResourceUsage::CopySrc)));
+          actionNode.resourceUsage.push_back(make_rdcpair(
+              GetResID(pDstBuffer), EventUsage(actionNode.action.eventId, ResourceUsage::CopyDst)));
         }
       }
     }
@@ -485,19 +487,21 @@ bool WrappedID3D12GraphicsCommandList::Serialise_ResolveSubresourceRegion(
 
         m_Cmd->AddAction(action);
 
-        D3D12EventNode &eventNode = m_Cmd->GetLastEventNode();
+        D3D12ActionTreeNode &actionNode = m_Cmd->GetActionStack().back()->children.back();
 
         if(pSrcResource == pDstResource)
         {
-          eventNode.resourceUsage.push_back(
-              make_rdcpair(GetResID(pSrcResource), ResourceUsage::Resolve));
+          actionNode.resourceUsage.push_back(make_rdcpair(
+              GetResID(pSrcResource), EventUsage(actionNode.action.eventId, ResourceUsage::Resolve)));
         }
         else
         {
-          eventNode.resourceUsage.push_back(
-              make_rdcpair(GetResID(pSrcResource), ResourceUsage::ResolveSrc));
-          eventNode.resourceUsage.push_back(
-              make_rdcpair(GetResID(pDstResource), ResourceUsage::ResolveDst));
+          actionNode.resourceUsage.push_back(
+              make_rdcpair(GetResID(pSrcResource),
+                           EventUsage(actionNode.action.eventId, ResourceUsage::ResolveSrc)));
+          actionNode.resourceUsage.push_back(
+              make_rdcpair(GetResID(pDstResource),
+                           EventUsage(actionNode.action.eventId, ResourceUsage::ResolveDst)));
         }
       }
     }

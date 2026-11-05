@@ -29,7 +29,6 @@
 #include "api/replay/rdcpair.h"
 #include "api/replay/resourceid.h"
 #include "api/replay/stringise.h"
-#include "common/common.h"
 
 namespace Sparse
 {
@@ -45,21 +44,8 @@ namespace Sparse
 // used for co-ordinates as well as dimensions
 struct Coord
 {
-  uint64_t x, y, z;
-
-  bool operator==(const Coord &o) const { return x == o.x && y == o.y && z == o.z; }
-};
-
-// for convenience with external APIs that use 32-bit values for
-// dimensions or sizes
-struct Coord32
-{
   uint32_t x, y, z;
 
-  // silently upcast to a Coord if needed
-  operator Coord() const { return {x, y, z}; }
-
-  bool operator==(const Coord32 &o) const { return x == o.x && y == o.y && z == o.z; }
   bool operator==(const Coord &o) const { return x == o.x && y == o.y && z == o.z; }
 };
 
@@ -101,7 +87,7 @@ struct PageRangeMapping
     singleMapping = Page();
     singlePageReused = false;
   }
-  Page getPage(uint64_t idx, uint32_t pageByteSize) const
+  Page getPage(uint32_t idx, uint32_t pageSize) const
   {
     if(pages.empty())
     {
@@ -109,22 +95,14 @@ struct PageRangeMapping
         return singleMapping;
 
       Page ret = singleMapping;
-      ret.offset += pageByteSize * idx;
+      ret.offset += pageSize * idx;
       return ret;
     }
 
-    // on a 32-bit build this could truncate but we won't expect to get here in the first place with a >32-bit resource
-    return pages[(size_t)idx];
+    return pages[idx];
   }
 
-  // simple helper just for 32-bit builds
-  inline Page &accessPage(uint64_t idx)
-  {
-    // on a 32-bit build this could truncate but we won't expect to get here in the first place with a >32-bit resource
-    return pages[(size_t)idx];
-  }
-
-  void createPages(uint64_t numPages, uint32_t pageByteSize);
+  void createPages(uint32_t numPages, uint32_t pageSize);
 };
 
 struct MipTail
@@ -176,21 +154,8 @@ public:
   uint64_t GetSerialiseSize() const;
 
   inline uint32_t getPageByteSize() const { return m_PageByteSize; }
-  inline Coord32 getPageTexelSize() const
-  {
-    // safe to downcast, the size of a page in texels will never exceed 32-bit even with a
-    // theoretical 1-bit per pixel format
-    return {(uint32_t)m_PageTexelSize.x, (uint32_t)m_PageTexelSize.y, (uint32_t)m_PageTexelSize.z};
-  }
-  inline Coord32 getResourceTexelDim() const
-  {
-    // check the downcast but we assume it will be OK as texture dimensions are not expected to be more than 32-bit.
-    RDCASSERT(
-        m_TextureDim.x < 0xffffffff && m_TextureDim.y < 0xffffffff && m_TextureDim.z < 0xffffffff,
-        m_TextureDim.x, m_TextureDim.y, m_TextureDim.z);
-    return {(uint32_t)m_TextureDim.x, (uint32_t)m_TextureDim.y, (uint32_t)m_TextureDim.z};
-  }
-  inline uint64_t getBufferSize() const { return m_TextureDim.x; }
+  inline Coord getPageTexelSize() const { return m_PageTexelSize; }
+  inline Coord getResourceSize() const { return m_TextureDim; }
   const Coord getSubresourceDim(uint32_t subresource) const;
   // useful for D3D where the mip tail is indexed by subresource/array slice even if we treat it all
   // as one
@@ -205,14 +170,6 @@ public:
     return arraySlice * m_MipCount + mipLevel;
   }
   Coord calcSubresourcePageDim(uint32_t subresource) const;
-  Coord32 calcSubresourcePageDim32(uint32_t subresource) const
-  {
-    Coord ret = calcSubresourcePageDim(subresource);
-    // check the downcast but we assume it will be OK as we don't expect number of pages in any
-    // dimension to be more than 32-bit.
-    RDCASSERT(ret.x < 0xffffffff && ret.y < 0xffffffff && ret.z < 0xffffffff, ret.x, ret.y, ret.z);
-    return {(uint32_t)ret.x, (uint32_t)ret.y, (uint32_t)ret.z};
-  }
 
   // is this subresource in the mip tail
   inline bool isSubresourceInMipTail(uint32_t subresource) const
@@ -254,12 +211,7 @@ public:
   {
     const Coord subresourcePageDim = calcSubresourcePageDim(subresource);
 
-    uint64_t ret = m_PageByteSize;
-    ret *= subresourcePageDim.x;
-    ret *= subresourcePageDim.y;
-    ret *= subresourcePageDim.z;
-
-    return ret;
+    return subresourcePageDim.x * subresourcePageDim.y * subresourcePageDim.z * m_PageByteSize;
   }
 
   // set a contiguous range of pages, with offsets and sizes applied in bytes.

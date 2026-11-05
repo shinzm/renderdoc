@@ -567,7 +567,8 @@ bool WrappedID3D11DeviceContext::Serialise_ClearView(SerialiserType &ser, ID3D11
 
       if(resid != ResourceId())
       {
-        m_ResourceUses[resid].push_back(EventUsage(m_CurEventID, ResourceUsage::Clear));
+        m_ResourceUses[resid].push_back(
+            EventUsage(m_CurEventID, ResourceUsage::Clear, GetIDForDeviceChild(pView)));
         action.copyDestination = resid;
         action.copyDestinationSubresource = Subresource();
 
@@ -1926,7 +1927,8 @@ bool WrappedID3D11DeviceContext::Serialise_DiscardView(SerialiserType &ser, ID3D
         ResourceId resid = GetViewResourceResID(pResourceView);
         action.copyDestination = resid;
         action.copyDestinationSubresource = Subresource(range.GetMinMip(), range.GetMinSlice());
-        m_ResourceUses[resid].push_back(EventUsage(m_CurEventID, ResourceUsage::Discard));
+        m_ResourceUses[resid].push_back(
+            EventUsage(m_CurEventID, ResourceUsage::Discard, GetIDForDeviceChild(pResourceView)));
       }
 
       AddAction(action);
@@ -2060,7 +2062,8 @@ bool WrappedID3D11DeviceContext::Serialise_DiscardView1(SerialiserType &ser,
         ResourceId resid = GetViewResourceResID(pResourceView);
         action.copyDestination = resid;
         action.copyDestinationSubresource = Subresource(range.GetMinMip(), range.GetMinSlice());
-        m_ResourceUses[resid].push_back(EventUsage(m_CurEventID, ResourceUsage::Discard));
+        m_ResourceUses[resid].push_back(
+            EventUsage(m_CurEventID, ResourceUsage::Discard, GetIDForDeviceChild(pResourceView)));
       }
 
       AddAction(action);

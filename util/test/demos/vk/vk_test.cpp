@@ -406,9 +406,9 @@ void VulkanGraphicsTest::Prepare(int argc, char **argv)
   if(!volk)
     Avail = "volk did not initialise - vulkan library is not available";
   else if(!spv)
-    Avail =
-        "Couldn't find 'glslc' or 'glslangValidator' in PATH - "
-        "required for SPIR-V compilation";
+    Avail = InternalSpvCompiler() ? "Internal SPIR-V compiler did not initialise"
+                                  : "Couldn't find 'glslc' or 'glslangValidator' in PATH - "
+                                    "required for SPIR-V compilation";
   else if(instance == VK_NULL_HANDLE)
     Avail = "Vulkan instance did not initialise";
   else if(phys == VK_NULL_HANDLE)
@@ -736,7 +736,8 @@ bool VulkanGraphicsTest::Init()
     queueCreates.push_back(vkh::DeviceQueueCreateInfo(transferQueueFamilyIndex, 1, priorities));
 
   CHECK_VKR(vkCreateDevice(
-      phys, vkh::DeviceCreateInfo(queueCreates, devExts, features).next(devInfoNext), NULL, &device));
+      phys, vkh::DeviceCreateInfo(queueCreates, enabledLayers, devExts, features).next(devInfoNext),
+      NULL, &device));
 
   volkLoadDevice(device);
 
@@ -744,7 +745,7 @@ bool VulkanGraphicsTest::Init()
 
   if(!headless)
   {
-    mainWindow = MakeWindow(screenWidth, screenHeight, screenTitle);
+    mainWindow = MakeWindow(screenWidth, screenHeight, "Autotesting");
 
     if(!mainWindow->Initialised())
     {
@@ -1009,62 +1010,17 @@ VkPipelineShaderStageCreateInfo VulkanGraphicsTest::LoadShaderModule(const std::
 
 VkPipelineShaderStageCreateInfo VulkanGraphicsTest::CompileShaderModule(
     const std::string &source_text, ShaderLang lang, ShaderStage stage, const char *entry_point,
-    const std::map<std::string, std::string> &macros, SPIRVTarget target, uint32_t compileOptions)
+    const std::map<std::string, std::string> &macros, SPIRVTarget target)
 {
   VkShaderModule ret = VK_NULL_HANDLE;
 
-  const bool separateDebug = ((compileOptions & CompileOptionFlags::SeparateDebug) != 0);
-  const bool relativeDebugName = ((compileOptions & CompileOptionFlags::RelativeDebugName) != 0);
-
   std::vector<uint32_t> spirv =
-      ::CompileShaderToSpv(demoName, source_text, target, lang, stage, entry_point, macros);
+      ::CompileShaderToSpv(source_text, target, lang, stage, entry_point, macros);
 
   if(spirv.empty())
     return {};
 
-  std::string path;
-  if(separateDebug)
-  {
-    path = tmpPath + "/";
-
-    std::string filenames[] = {
-        "shader_vs.dbg", "shader_hs.dbg", "shader_ds.dbg", "shader_gs.dbg",
-        "shader_ps.dbg", "shader_cs.dbg", "shader_ms.dbg", "shader_as.dbg",
-    };
-
-    path += filenames[(int)stage];
-
-    FILE *f = fopen(path.c_str(), "wb");
-    if(f)
-    {
-      fwrite(spirv.data(), 1, spirv.size() * sizeof(uint32_t), f);
-      fclose(f);
-    }
-
-    spirv =
-        ::CompileShaderToSpv(demoName, source_text, target, lang, stage, entry_point, macros, false);
-  }
-
   CHECK_VKR(vkCreateShaderModule(device, vkh::ShaderModuleCreateInfo(spirv), NULL, &ret));
-
-  if(relativeDebugName)
-  {
-    path.erase(0, path.find_last_of("/\\") + 1);
-    // keep the demo name so we don't have to set up tons of search paths
-    path = std::string(demoName) + "/" + path;
-  }
-
-  if(vkSetDebugUtilsObjectTagEXT && !path.empty())
-  {
-    VkDebugUtilsObjectTagInfoEXT info = {};
-    info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_TAG_INFO_EXT;
-    info.objectType = VK_OBJECT_TYPE_SHADER_MODULE;
-    info.objectHandle = (uint64_t)ret;
-    info.pTag = path.c_str();
-    info.tagSize = path.size();
-    info.tagName = RENDERDOC_ShaderDebugMagicValue_truncated;
-    vkSetDebugUtilsObjectTagEXT(device, &info);
-  }
 
   shaders.push_back(ret);
 
@@ -1097,12 +1053,6 @@ template <>
 void VulkanGraphicsTest::setName(VkPipeline obj, const std::string &name)
 {
   setName(VK_OBJECT_TYPE_PIPELINE, (uint64_t)obj, name);
-}
-
-template <>
-void VulkanGraphicsTest::setName(VkPipelineLayout obj, const std::string &name)
-{
-  setName(VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t)obj, name);
 }
 
 template <>
@@ -1157,48 +1107,6 @@ template <>
 void VulkanGraphicsTest::setName(VkAccelerationStructureKHR obj, const std::string &name)
 {
   setName(VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR, (uint64_t)obj, name);
-}
-
-template <>
-void VulkanGraphicsTest::setName(VkDescriptorSetLayout obj, const std::string &name)
-{
-  setName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)obj, name);
-}
-
-template <>
-void VulkanGraphicsTest::setName(VkDescriptorSet obj, const std::string &name)
-{
-  setName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)obj, name);
-}
-
-template <>
-void VulkanGraphicsTest::setName(VkRenderPass obj, const std::string &name)
-{
-  setName(VK_OBJECT_TYPE_RENDER_PASS, (uint64_t)obj, name);
-}
-
-template <>
-void VulkanGraphicsTest::setName(VkCommandBuffer obj, const std::string &name)
-{
-  setName(VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)obj, name);
-}
-
-template <>
-void VulkanGraphicsTest::setName(VkCommandPool obj, const std::string &name)
-{
-  setName(VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)obj, name);
-}
-
-template <>
-void VulkanGraphicsTest::setName(VkQueue obj, const std::string &name)
-{
-  setName(VK_OBJECT_TYPE_QUEUE, (uint64_t)obj, name);
-}
-
-template <>
-void VulkanGraphicsTest::setName(VkShaderModule obj, const std::string &name)
-{
-  setName(VK_OBJECT_TYPE_SHADER_MODULE, (uint64_t)obj, name);
 }
 
 void VulkanGraphicsTest::setName(VkObjectType objType, uint64_t obj, const std::string &name)
@@ -1749,16 +1657,6 @@ bool VulkanWindow::CreateSwapchain()
 
     renderPassCreateInfo.addSubpass({VkAttachmentReference({0, VK_IMAGE_LAYOUT_GENERAL})});
 
-    // add deps to allow clear/copy on the main target before or after
-    renderPassCreateInfo.dependencies.push_back(vkh::SubpassDependency(
-        ~0U, 0, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-        VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
-        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT));
-    renderPassCreateInfo.dependencies.push_back(vkh::SubpassDependency(
-        0, ~0U, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT));
-
     rp = m_Test->createRenderPass(renderPassCreateInfo);
   }
 
@@ -1803,8 +1701,8 @@ void VulkanWindow::Acquire()
   semIdx = (semIdx + 1) % renderStartSemaphore.size();
 
   // acquire next image stupidly does not properly block, do a manual block
-  CHECK_VKR(vkWaitForFences(m_Test->device, 1, &imageFences[semIdx], VK_FALSE, UINT64_MAX));
-  CHECK_VKR(vkResetFences(m_Test->device, 1, &imageFences[semIdx]));
+  vkWaitForFences(m_Test->device, 1, &imageFences[semIdx], VK_FALSE, UINT64_MAX);
+  vkResetFences(m_Test->device, 1, &imageFences[semIdx]);
 
   VkResult vkr = vkAcquireNextImageKHR(m_Test->device, swap, UINT64_MAX,
                                        renderStartSemaphore[semIdx], imageFences[semIdx], &imgIndex);
@@ -1877,8 +1775,6 @@ void VulkanWindow::Present(VkQueue queue)
 {
   if(swap == VK_NULL_HANDLE)
     return;
-
-  vkDeviceWaitIdle(m_Test->device);
 
   VkResult vkr =
       vkQueuePresentKHR(queue, vkh::PresentInfoKHR(swap, imgIndex, &renderEndSemaphore[semIdx]));

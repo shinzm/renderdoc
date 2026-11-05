@@ -10,14 +10,14 @@ except ImportError as ex:
 class D3D12_RGP_Capture(rdtest.TestCase):
     demos_test_name = 'D3D12_Simple_Triangle'
 
-    def check_support(self):
+    def check_support(self, **kwargs):
         if tkinter is None:
             return False, 'tkinter is required but not available'
         
-        return super().check_support()
+        return super().check_support(**kwargs)
 
     def check_capture(self):
-        apiprops = self.controller.GetAPIProperties()
+        apiprops: rd.APIProperties = self.controller.GetAPIProperties()
 
         if not apiprops.rgpCapture:
             rdtest.log.print("RGP capture not tested")
@@ -28,9 +28,9 @@ class D3D12_RGP_Capture(rdtest.TestCase):
         window = tkinter.Tk()
         window.geometry("1280x720")
 
-        path = self.controller.CreateRGPProfile(rd.CreateWin32WindowingData(int(window.frame(), 16))) # type: ignore
+        path = self.controller.CreateRGPProfile(rd.CreateWin32WindowingData(int(window.frame(), 16)))
 
-        rdtest.log.print(f"RGP capture created: '{path}'")
+        rdtest.log.print("RGP capture created: '{}'".format(path))
 
         if os.path.exists(path) and os.path.getsize(path) > 100:
             rdtest.log.success("RGP capture created successfully")

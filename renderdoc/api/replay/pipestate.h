@@ -29,18 +29,12 @@
 #include "gl_pipestate.h"
 #include "vk_pipestate.h"
 
-DOCUMENT(R"(
-PipeState()
-
-An API-agnostic view of the common aspects of the pipeline state. This allows simple
+DOCUMENT(R"(An API-agnostic view of the common aspects of the pipeline state. This allows simple
 access to e.g. find out the bound resources or vertex buffers, or certain pipeline state which is
 available on all APIs.
 
 For more detailed or precise information without abstraction, access the specific pipeline state
 for the capture that's open.
-
-Available from :meth:`~qrenderdoc.CaptureContext.CurPipelineState` in the UI or
-:meth:`~renderdoc.ReplayController.GetPipelineState` from the replay API directly.
 )");
 struct PipeState
 {
@@ -176,12 +170,6 @@ public:
 )");
   uint32_t MultiviewBroadcastCount() const;
 
-  DOCUMENT(R"(
-:return: The number of multisample samples to use when not implicit from output targets.
-:rtype: int
-)");
-  uint32_t GetOverrideSampleCount() const;
-
   DOCUMENT(R"(Determines whether or not the current capture supports binding arrays of resources.
 
 :return: A boolean indicating if binding arrays of resources is supported.
@@ -197,7 +185,7 @@ public:
 :rtype: bool
 )");
   bool SupportsBarriers() const { return IsCaptureLoaded() && (IsCaptureVK() || IsCaptureD3D12()); }
-  DOCUMENT(R"(Determines whether or not the PostVS data is aligned in the typical fashion (i.e.
+  DOCUMENT(R"(Determines whether or not the PostVS data is aligned in the typical fashion (ie.
 vectors not crossing ``float4`` boundaries). APIs that use stream-out or transform feedback have
 tightly packed data, but APIs that rewrite shaders to dump data might have these alignment
 requirements.
@@ -264,7 +252,7 @@ This returns ``None`` if no shader is bound.
 
 :param ShaderStage stage: The shader stage to fetch.
 :return: The reflection data for the given shader.
-:rtype: Optional[ShaderReflection]
+:rtype: ShaderReflection
 )");
   const ShaderReflection *GetShaderReflection(ShaderStage stage) const;
 
@@ -363,7 +351,7 @@ convenience of access.
 
   DOCUMENT(R"(Retrieves all descriptor information for all descriptors accessed at the current event.
 
-:param bool onlyUsed=False: **Optional parameter**. Omit descriptors bound or declared but not accessed.
+:param bool onlyUsed: Omit descriptors bound or declared but not accessed.
 :return: All descriptors accessed at the current event.
 :rtype: List[UsedDescriptor]
 )");
@@ -383,7 +371,7 @@ convenience of access.
   DOCUMENT(R"(Retrieves the constant blocks used by a particular shader stage.
 
 :param ShaderStage stage: The shader stage to fetch from.
-:param bool onlyUsed=False: **Optional parameter**. Omit descriptors bound or declared but not accessed.
+:param bool onlyUsed: Omit descriptors bound or declared but not accessed.
 :return: The currently bound constant blocks.
 :rtype: List[UsedDescriptor]
 )");
@@ -392,7 +380,7 @@ convenience of access.
   DOCUMENT(R"(Retrieves the read-only resources used by a particular shader stage.
 
 :param ShaderStage stage: The shader stage to fetch from.
-:param bool onlyUsed=False: **Optional parameter**. Omit descriptors bound or declared but not accessed.
+:param bool onlyUsed: Omit descriptors bound or declared but not accessed.
 :return: The currently bound read-only resources.
 :rtype: List[UsedDescriptor]
 )");
@@ -401,7 +389,7 @@ convenience of access.
   DOCUMENT(R"(Retrieves the samplers bound to a particular shader stage.
 
 :param ShaderStage stage: The shader stage to fetch from.
-:param bool onlyUsed=False: **Optional parameter**. Omit descriptors bound or declared but not accessed.
+:param bool onlyUsed: Omit descriptors bound or declared but not accessed.
 :return: The currently bound sampler resources.
 :rtype: List[UsedDescriptor]
 )");
@@ -410,7 +398,7 @@ convenience of access.
   DOCUMENT(R"(Retrieves the read/write resources used by a particular shader stage.
 
 :param ShaderStage stage: The shader stage to fetch from.
-:param bool onlyUsed=False: **Optional parameter**. Omit descriptors bound or declared but not accessed.
+:param bool onlyUsed: Omit descriptors bound or declared but not accessed.
 :return: The currently bound read/write resources.
 :rtype: List[UsedDescriptor]
 )");
@@ -444,44 +432,12 @@ convenience of access.
 )");
   rdcarray<ColorBlend> GetColorBlends() const;
 
-  DOCUMENT(R"(Retrieves the current fixed blend factor.
-
-:return: The currently fixed blend factor.
-:rtype: Tuple[float,float,float,float]
-)");
-  rdcfixedarray<float, 4> GetBlendFactor() const;
-
-  DOCUMENT(R"(Checks whether stencil operations are enabled or not.
-
-:return: ``True`` if stencil testing is enabled.
-:rtype: bool
-)");
-  bool IsStencilTestEnabled() const;
-
   DOCUMENT(R"(Retrieves the current stencil states.
 
 :return: The currently stencil states. Front facing first, back facing second.
 :rtype: Tuple[StencilFace, StencilFace]
 )");
   rdcpair<StencilFace, StencilFace> GetStencilFaces() const;
-
-  DOCUMENT(R"(Retrieves some of the depth testing state.
-
-This doesn't contain all properties from all APIs but a common subset.
-
-:return: The currently depth testing state.
-:rtype: DepthTestState
-)");
-  DepthTestState GetDepthTestState() const;
-
-  DOCUMENT(R"(Retrieves some of the rasterizer state.
-
-This doesn't contain all properties from all APIs but a common subset.
-
-:return: The currently depth testing state.
-:rtype: RasterState
-)");
-  RasterState GetRasterState() const;
 
   DOCUMENT(R"(Determines whether or not independent blending is enabled.
 

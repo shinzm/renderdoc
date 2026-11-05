@@ -32,7 +32,7 @@ namespace Ui
 class CrashDialog;
 }
 
-class PersistentConfig;
+class PersistantConfig;
 class QNetworkAccessManager;
 class QNetworkReply;
 class QElapsedTimer;
@@ -43,11 +43,11 @@ class CrashDialog : public QDialog
 {
   Q_OBJECT
 public:
-  explicit CrashDialog(PersistentConfig &cfg, QVariantMap crashReportJSON, QWidget *parent = 0);
+  explicit CrashDialog(PersistantConfig &cfg, QVariantMap crashReportJSON, QWidget *parent = 0);
   ~CrashDialog();
 
-  static bool HasCaptureReady(PersistentConfig &cfg);
-  static bool CaptureTooLarge(PersistentConfig &cfg);
+  static bool HasCaptureReady(PersistantConfig &cfg);
+  static bool CaptureTooLarge(PersistantConfig &cfg);
 
 private slots:
   // automatic slots
@@ -90,5 +90,5 @@ private:
 
   Thumbnail *m_Thumbnail = NULL;
 
-  PersistentConfig &m_Config;
+  PersistantConfig &m_Config;
 };

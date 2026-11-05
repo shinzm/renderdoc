@@ -5,8 +5,8 @@ import rdtest
 class Discard_Zoo(rdtest.TestCase):
     internal = True
 
-    def check_val(self, picked: rd.PixelValue, val: rdtest.ScalarOrVectorValue, fmt: rd.ResourceFormat):
-        if isinstance(val, float) or isinstance(val, int):
+    def check_val(self, picked, val, fmt):
+        if type(val) != list:
             val = [val, val, val, val]
 
         if fmt.compType == rd.CompType.UInt or fmt.compType == rd.CompType.SInt or fmt.type == rd.ResourceFormatType.S8:
@@ -19,16 +19,18 @@ class Discard_Zoo(rdtest.TestCase):
 
             return rdtest.value_compare(comp_val, val[0:fmt.compCount])
 
-    def check_texture(self, id: rd.ResourceId, discarded: bool):
-        tex = self.get_texture(id)
-        res = self.get_resource(id)
+    def check_texture(self, id, discarded: bool):
+        tex: rd.TextureDescription = self.get_texture(id)
+        res: rd.ResourceDescription = self.get_resource(id)
 
-        fmt = tex.format
+        fmt: rd.ResourceFormat = tex.format
 
-        props = self.controller.GetAPIProperties()
+        props: rd.APIProperties = self.controller.GetAPIProperties()
         gl = (props.pipelineType == rd.GraphicsAPI.OpenGL)
 
-        name = f'{res.name} - {tex.width}x{tex.height} {tex.mips} mip {tex.arraysize} slice {tex.msSamp}x MSAA {tex.format.Name()} format texture'
+        name = '{} - {}x{} {} mip {} slice {}x MSAA {} format texture'.format(res.name, tex.width, tex.height,
+                                                                              tex.mips, tex.arraysize,
+                                                                              tex.msSamp, tex.format.Name())
 
         minval = 0.0
         maxval = 1000.0
@@ -108,11 +110,12 @@ class Discard_Zoo(rdtest.TestCase):
                             if gl and h > 1:
                                 y = h - 1 - y
 
-                            picked = self.pick_pixel(id, x, y, sub, rd.CompType.Typeless)
+                            picked: rd.PixelValue = self.controller.PickPixel(id, x, y, sub, rd.CompType.Typeless)
 
                             if self.check_val(picked, minval, fmt) or self.check_val(picked, maxval, fmt):
                                 raise rdtest.TestFailureException(
-                                    f'{name} has unexpected value at {x},{y}: {picked.floatValue}')
+                                    '{} has unexpected value at {},{}: {}'.format(name, x, y,
+                                                                                  picked.floatValue))
 
                     if sub_discarded:
                         seen = [False, False]
@@ -130,14 +133,15 @@ class Discard_Zoo(rdtest.TestCase):
                             if gl and h > 1:
                                 y = h - 1 - y
 
-                            picked = self.pick_pixel(id, x, y, sub, rd.CompType.Typeless)
+                            picked: rd.PixelValue = self.controller.PickPixel(id, x, y, sub, rd.CompType.Typeless)
 
                             is_min = self.check_val(picked, minval, fmt)
                             is_max = self.check_val(picked, maxval, fmt)
 
                             if not is_min and not is_max:
                                 raise rdtest.TestFailureException(
-                                    f'{name} has unexpected value at {x},{y}: {picked.floatValue}')
+                                    '{} has unexpected value at {},{}: {}'.format(name, x, y,
+                                                                                  picked.floatValue))
 
                             if is_min:
                                 seen[0] = True
@@ -158,14 +162,15 @@ class Discard_Zoo(rdtest.TestCase):
                                 if gl and h > 1:
                                     y = h - 1 - y
 
-                                picked = self.pick_pixel(id, x, y, sub, rd.CompType.Typeless)
+                                picked: rd.PixelValue = self.controller.PickPixel(id, x, y, sub, rd.CompType.Typeless)
 
                                 is_min = self.check_val(picked, minval, fmt)
                                 is_max = self.check_val(picked, maxval, fmt)
 
                                 if not is_min and not is_max:
                                     raise rdtest.TestFailureException(
-                                        f'{name} has unexpected value at {x},{y}: {picked.floatValue}')
+                                        '{} has unexpected value at {},{}: {}'.format(name, x, y,
+                                                                                      picked.floatValue))
 
                                 if is_min:
                                     seen[0] = True
@@ -175,31 +180,33 @@ class Discard_Zoo(rdtest.TestCase):
                         # We also expect to have seen both colours. That means if we only saw black for example then we
                         # fail
                         if not seen[0] or not seen[1]:
-                            raise rdtest.TestFailureException(f'{name} doesn\'t contain expected pattern')
+                            raise rdtest.TestFailureException('{} doesn\'t contain expected pattern'.format(name))
 
-        rdtest.log.success(f"{name} is OK {'after' if discarded else 'before'} discarding")
+        rdtest.log.success('{} is OK {} discarding'.format(name, "after" if discarded else "before"))
 
     def check_textures(self):
         action = self.find_action("TestStart")
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, True)
+        self.controller.SetFrameEvent(action.eventId, True)
 
         for tex in self.controller.GetTextures():
-            res = self.get_resource(tex.resourceId)
+            tex: rd.TextureDescription
+            res: rd.ResourceDescription = self.get_resource(tex.resourceId)
 
             if "Discard" in res.name:
                 self.check_texture(tex.resourceId, False)
 
         action = self.find_action("TestEnd")
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, True)
+        self.controller.SetFrameEvent(action.eventId, True)
 
         for tex in self.controller.GetTextures():
-            res = self.get_resource(tex.resourceId)
+            tex: rd.TextureDescription
+            res: rd.ResourceDescription = self.get_resource(tex.resourceId)
 
             if "Discard" in res.name:
                 self.check_texture(tex.resourceId, True)

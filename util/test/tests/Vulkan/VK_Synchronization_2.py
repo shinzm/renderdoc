@@ -14,54 +14,56 @@ class VK_Synchronization_2(rdtest.TestCase):
         return opts
 
     def check_capture(self):
-        self.set_event(0, False)
+        self.controller.SetFrameEvent(0, False)
 
-        pipe = self.controller.GetVulkanPipelineState()
+        pipe: rd.VKState = self.controller.GetVulkanPipelineState()
 
         # Check that the layout is reported correctly at the start of the frame
         for img in pipe.images:
+            img: rd.VKImageData
             res = self.get_resource(img.resourceId)
             if res.name == "Image:Preinitialised":
                 if img.layouts[0].name != "VK_IMAGE_LAYOUT_PREINITIALIZED":
-                    raise rdtest.TestFailureException(f"Pre-initialised image is in {img.layouts[0].name} layout")
+                    raise rdtest.TestFailureException("Pre-initialised image is in {} layout".format(img.layouts[0].name))
             elif res.name == "Image:Undefined":
                 if img.layouts[0].name != "VK_IMAGE_LAYOUT_UNDEFINED":
-                    raise rdtest.TestFailureException(f"Undefined image is in {img.layouts[0].name} layout")
+                    raise rdtest.TestFailureException("Undefined image is in {} layout".format(img.layouts[0].name))
             elif res.name == "Image:Swapchain":
                 if img.layouts[0].name != "VK_IMAGE_LAYOUT_PRESENT_SRC_KHR":
-                    raise rdtest.TestFailureException(f"Swapchain image is in {img.layouts[0].name} layout")
+                    raise rdtest.TestFailureException("Swapchain image is in {} layout".format(img.layouts[0].name))
 
         action = self.find_action("Before Transition")
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        pipe = self.controller.GetVulkanPipelineState()
+        pipe: rd.VKState = self.controller.GetVulkanPipelineState()
 
         pre_init = rd.ResourceId()
         undef_img = rd.ResourceId()
 
         # Check that the layout is reported correctly before transitions still
         for img in pipe.images:
+            img: rd.VKImageData
             res = self.get_resource(img.resourceId)
             if res.name == "Image:Preinitialised":
                 if img.layouts[0].name != "VK_IMAGE_LAYOUT_PREINITIALIZED":
-                    raise rdtest.TestFailureException(f"Pre-initialised image is in {img.layouts[0].name} layout")
+                    raise rdtest.TestFailureException("Pre-initialised image is in {} layout".format(img.layouts[0].name))
                 pre_init = img.resourceId
             elif res.name == "Image:Undefined":
                 if img.layouts[0].name != "VK_IMAGE_LAYOUT_UNDEFINED":
-                    raise rdtest.TestFailureException(f"Undefined image is in {img.layouts[0].name} layout")
+                    raise rdtest.TestFailureException("Undefined image is in {} layout".format(img.layouts[0].name))
                 undef_img = img.resourceId
             elif res.name == "Image:Swapchain":
                 if img.layouts[0].name != "VK_IMAGE_LAYOUT_PRESENT_SRC_KHR":
-                    raise rdtest.TestFailureException(f"Swapchain image is in {img.layouts[0].name} layout")
+                    raise rdtest.TestFailureException("Swapchain image is in {} layout".format(img.layouts[0].name))
 
         action = self.find_action("vkCmdDraw")
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
         # Check that the backbuffer didn't get discarded
         self.check_triangle(out=action.outputs[0])
@@ -74,17 +76,18 @@ class VK_Synchronization_2(rdtest.TestCase):
         # we copied its contents into the undefined image so it should also have the right colour
         self.check_triangle(out=undef_img, back=col, fore=col)
 
-        pipe = self.controller.GetVulkanPipelineState()
+        pipe: rd.VKState = self.controller.GetVulkanPipelineState()
 
         # Check that after transitions, the images are in the right state
         for img in pipe.images:
+            img: rd.VKImageData
             res = self.get_resource(img.resourceId)
             if res.name == "Image:Preinitialised":
                 if img.layouts[0].name != "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL":
-                    raise rdtest.TestFailureException(f"Pre-initialised image is in {img.layouts[0].name} layout")
+                    raise rdtest.TestFailureException("Pre-initialised image is in {} layout".format(img.layouts[0].name))
             elif res.name == "Image:Undefined":
                 if img.layouts[0].name != "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL":
-                    raise rdtest.TestFailureException(f"Undefined image is in {img.layouts[0].name} layout")
+                    raise rdtest.TestFailureException("Undefined image is in {} layout".format(img.layouts[0].name))
             elif img.resourceId == pipe.currentPass.framebuffer.attachments[0].resource:
                 if img.layouts[0].name != "VK_IMAGE_LAYOUT_GENERAL":
-                    raise rdtest.TestFailureException(f"Rendered swapchain image is in {img.layouts[0].name} layout")
+                    raise rdtest.TestFailureException("Rendered swapchain image is in {} layout".format(img.layouts[0].name))

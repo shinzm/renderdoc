@@ -12,16 +12,16 @@ class D3D11_Frame0(rdtest.TestCase):
         found = False
         sdfile = self.controller.GetStructuredFile()
         for e in first_action.events:
-            c = sdfile.chunks[e.chunkIndex]
+            c: rd.SDChunk = sdfile.chunks[e.chunkIndex]
             if 'Unmap' in c.name:
                 found = True
 
         if not found:
             raise rdtest.TestFailureException("Expected an Unmap() chunk in frame 0, but couldn't find it!")
 
-        last_action = self.get_last_action()
+        last_action: rd.ActionDescription = self.get_last_action()
 
-        self.set_event(last_action.eventId, True)
+        self.controller.SetFrameEvent(last_action.eventId, True)
 
         self.check_triangle(out=last_action.copyDestination)
 
@@ -29,13 +29,11 @@ class D3D11_Frame0(rdtest.TestCase):
 
         action = self.find_action("Draw")
 
-        assert action is not None
-
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
         postvs_data = self.get_postvs(action, rd.MeshDataStage.VSOut, 0, action.numIndices)
 
-        postvs_ref: rdtest.MeshReference = {
+        postvs_ref = {
             0: {
                 'vtx': 0,
                 'idx': 0,
@@ -63,6 +61,8 @@ class D3D11_Frame0(rdtest.TestCase):
 
         # Check that nothing breaks if we call typical enumeration functions on resources
         for res in self.controller.GetResources():
+            res: rd.ResourceDescription
+
             self.controller.GetShaderEntryPoints(res.resourceId)
             self.controller.GetUsage(res.resourceId)
             self.controller.GetBufferData(res.resourceId, 0, 0)

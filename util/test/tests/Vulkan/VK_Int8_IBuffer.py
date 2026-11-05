@@ -8,11 +8,11 @@ class VK_Int8_IBuffer(rdtest.TestCase):
     def check_capture(self):
         action = self.find_action("Draw")
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         postvs_data = self.get_postvs(action, rd.MeshDataStage.VSOut, 0, action.numIndices)
 
@@ -22,7 +22,7 @@ class VK_Int8_IBuffer(rdtest.TestCase):
         striprestart_index = pipe.GetRestartIndex() & ((1 << (ib.byteStride*8)) - 1)
 
         # We don't check all of the output, we check a few key vertices to ensure they match up
-        postvs_ref: rdtest.MeshReference = {
+        postvs_ref = {
             0: {
                 'vtx': 0,
                 'idx': 0,

@@ -48,7 +48,6 @@
 #include <functional>
 #include <set>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 class TInfoSink;
@@ -269,7 +268,6 @@ public:
         gpu_shader_fp64                           = 1 << 9,
         gpu_shader_int16                          = 1 << 10,
         gpu_shader_half_float                     = 1 << 11,
-        nv_gpu_shader5_types                      = 1 << 12,
     } feature;
     void insert(feature f) { features |= f; }
     void erase(feature f) { features &= ~f; }
@@ -344,7 +342,6 @@ public:
         numTaskNVBlocks(0),
         layoutPrimitiveCulling(false),
         numTaskEXTPayloads(0),
-        nonCoherentTileAttachmentReadQCOM(false),
         autoMapBindings(false),
         autoMapLocations(false),
         flattenUniformArrays(false),
@@ -352,7 +349,6 @@ public:
         hlslOffsets(false),
         hlslIoMapping(false),
         useVariablePointers(false),
-        bindingsPerResourceType(false),
         textureSamplerTransformMode(EShTexSampTransKeep),
         needToLegalize(false),
         binaryDoubleOutput(false),
@@ -375,12 +371,6 @@ public:
         localSizeSpecId[1] = TQualifier::layoutNotSet;
         localSizeSpecId[2] = TQualifier::layoutNotSet;
         xfbBuffers.resize(TQualifier::layoutXfbBufferEnd);
-        tileShadingRateQCOM[0] = 0;
-        tileShadingRateQCOM[1] = 0;
-        tileShadingRateQCOM[2] = 0;
-        tileShadingRateQCOMNotDefault[0] = false;
-        tileShadingRateQCOMNotDefault[1] = false;
-        tileShadingRateQCOMNotDefault[2] = false;
         shiftBinding.fill(0);
     }
 
@@ -577,8 +567,8 @@ public:
     TIntermConstantUnion* addConstantUnion(const TString*, const TSourceLoc&, bool literal = false) const;
     TIntermTyped* promoteConstantUnion(TBasicType, TIntermConstantUnion*) const;
     bool parseConstTree(TIntermNode*, TConstUnionArray, TOperator, const TType&, bool singleConstantParam = false);
-    TIntermLoop* addLoop(TIntermNode*, TIntermNode*, TIntermTyped*, bool testFirst, const TSourceLoc&);
-    TIntermAggregate* addForLoop(TIntermNode*, TIntermNode*, TIntermNode*, TIntermTyped*, bool testFirst,
+    TIntermLoop* addLoop(TIntermNode*, TIntermTyped*, TIntermTyped*, bool testFirst, const TSourceLoc&);
+    TIntermAggregate* addForLoop(TIntermNode*, TIntermNode*, TIntermTyped*, TIntermTyped*, bool testFirst,
         const TSourceLoc&, TIntermLoop*&);
     TIntermBranch* addBranch(TOperator, const TSourceLoc&);
     TIntermBranch* addBranch(TOperator, TIntermTyped*, const TSourceLoc&);
@@ -660,21 +650,6 @@ public:
     void output(TInfoSink&, bool tree);
 
     bool isEsProfile() const { return profile == EEsProfile; }
-
-    bool setTileShadingRateQCOM(int dim, int size)
-    {
-        if (tileShadingRateQCOMNotDefault[dim])
-            return size == tileShadingRateQCOM[dim];
-        tileShadingRateQCOMNotDefault[dim] = true;
-        tileShadingRateQCOM[dim] = size;
-        return true;
-    }
-    unsigned int getTileShadingRateQCOM(int dim) const { return tileShadingRateQCOM[dim]; }
-    bool isTileShadingRateQCOMSet() const
-    {
-        // Return true if any component has been set (i.e. any component is not default).
-        return tileShadingRateQCOMNotDefault[0] || tileShadingRateQCOMNotDefault[1] || tileShadingRateQCOMNotDefault[2];
-    }
 
     void setShiftBinding(TResourceType res, unsigned int shift)
     {
@@ -766,16 +741,6 @@ public:
         useReplicatedComposites = true;
     }
     bool usingReplicatedComposites() const { return useReplicatedComposites; }
-    void setPromoteUint32Indices()
-    {
-        promoteUint32Indices = true;
-    }
-    bool usingPromoteUint32Indices() const { return promoteUint32Indices; }
-    void setShader64BitIndexing()
-    {
-        shader64BitIndexing = true;
-    }
-    bool usingShader64BitIndexing() const { return shader64BitIndexing; }
     void setUseVariablePointers()
     {
         useVariablePointers = true;
@@ -841,13 +806,6 @@ public:
     }
 
     bool usingVariablePointers() const { return useVariablePointers; }
-
-    void setBindingsPerResourceType()
-    {
-        bindingsPerResourceType = true;
-        processes.addProcess("bindings-per-resource-type");
-    }
-    bool getBindingsPerResourceType() const { return bindingsPerResourceType; }
 
 #ifdef ENABLE_HLSL
     template<class T> T addCounterBufferName(const T& name) const { return name + implicitCounterName; }
@@ -938,8 +896,6 @@ public:
     bool getNonCoherentDepthAttachmentReadEXT() const { return nonCoherentDepthAttachmentReadEXT; }
     void setNonCoherentStencilAttachmentReadEXT() { nonCoherentStencilAttachmentReadEXT = true; }
     bool getNonCoherentStencilAttachmentReadEXT() const { return nonCoherentStencilAttachmentReadEXT; }
-    void setNonCoherentTileAttachmentReadQCOM() { nonCoherentTileAttachmentReadQCOM = true; }
-    bool getNonCoherentTileAttachmentReadQCOM() const { return nonCoherentTileAttachmentReadQCOM; }
     void setPostDepthCoverage() { postDepthCoverage = true; }
     bool getPostDepthCoverage() const { return postDepthCoverage; }
     void setEarlyFragmentTests() { earlyFragmentTests = true; }
@@ -1083,11 +1039,11 @@ public:
 #endif
 
     bool usingScalarBlockLayout() const {
-        return IsRequestedExtension(E_GL_EXT_scalar_block_layout);
-    }
-
-    bool usingTextureOffsetNonConst() const {
-        return IsRequestedExtension(E_GL_EXT_texture_offset_non_const);
+        for (auto extIt = requestedExtensions.begin(); extIt != requestedExtensions.end(); ++extIt) {
+            if (*extIt == E_GL_EXT_scalar_block_layout)
+                return true;
+        }
+        return false;
     }
 
     bool IsRequestedExtension(const char* extension) const
@@ -1101,8 +1057,7 @@ public:
 
     void mergeGlobalUniformBlocks(TInfoSink& infoSink, TIntermediate& unit, bool mergeExistingOnly);
     void mergeUniformObjects(TInfoSink& infoSink, TIntermediate& unit);
-    void mergeImplicitArraySizes(TInfoSink& infoSink, TIntermediate& unit);
-    void checkStageIO(TInfoSink&, TIntermediate&, EShMessages);
+    void checkStageIO(TInfoSink&, TIntermediate&);
     void optimizeStageIO(TInfoSink&, TIntermediate&);
 
     bool buildConvertOp(TBasicType dst, TBasicType src, TOperator& convertOp) const;
@@ -1155,42 +1110,26 @@ public:
     // Certain explicit conversions are allowed conditionally
     bool getArithemeticInt8Enabled() const {
         return numericFeatures.contains(TNumericFeatures::shader_explicit_arithmetic_types) ||
-               numericFeatures.contains(TNumericFeatures::nv_gpu_shader5_types) ||
                numericFeatures.contains(TNumericFeatures::shader_explicit_arithmetic_types_int8);
     }
     bool getArithemeticInt16Enabled() const {
         return numericFeatures.contains(TNumericFeatures::shader_explicit_arithmetic_types) ||
                numericFeatures.contains(TNumericFeatures::gpu_shader_int16) ||
-               numericFeatures.contains(TNumericFeatures::nv_gpu_shader5_types) ||
                numericFeatures.contains(TNumericFeatures::shader_explicit_arithmetic_types_int16);
     }
 
     bool getArithemeticFloat16Enabled() const {
         return numericFeatures.contains(TNumericFeatures::shader_explicit_arithmetic_types) ||
                numericFeatures.contains(TNumericFeatures::gpu_shader_half_float) ||
-               numericFeatures.contains(TNumericFeatures::nv_gpu_shader5_types) ||
                numericFeatures.contains(TNumericFeatures::shader_explicit_arithmetic_types_float16);
     }
     void updateNumericFeature(TNumericFeatures::feature f, bool on)
         { on ? numericFeatures.insert(f) : numericFeatures.erase(f); }
 
-    void setBuiltinAliasLookup(std::unordered_multimap<std::string, std::string> symbolMap) {
-        builtinAliasLookup = std::move(symbolMap);
-    }
-    const std::unordered_multimap<std::string, std::string>& getBuiltinAliasLookup() const {
-        return builtinAliasLookup;
-    }
-
 protected:
     TIntermSymbol* addSymbol(long long Id, const TString&, const TString&, const TType&, const TConstUnionArray&, TIntermTyped* subtree, const TSourceLoc&);
-    void error(TInfoSink& infoSink, const TSourceLoc* loc, EShMessages messages, const char*, EShLanguage unitStage = EShLangCount);
-    void error(TInfoSink& infoSink, const char* message, EShLanguage unitStage = EShLangCount) {
-        error(infoSink, nullptr, EShMsgDefault, message, unitStage);
-    }
-    void warn(TInfoSink& infoSink, const TSourceLoc* loc, EShMessages, const char*, EShLanguage unitStage = EShLangCount);
-    void warn(TInfoSink& infoSink, const char* message, EShLanguage unitStage = EShLangCount) {
-        warn(infoSink, nullptr, EShMsgDefault, message, unitStage);
-    }
+    void error(TInfoSink& infoSink, const char*, EShLanguage unitStage = EShLangCount);
+    void warn(TInfoSink& infoSink, const char*, EShLanguage unitStage = EShLangCount);
     void mergeCallGraphs(TInfoSink&, TIntermediate&);
     void mergeModes(TInfoSink&, TIntermediate&);
     void mergeTrees(TInfoSink&, TIntermediate&);
@@ -1296,10 +1235,6 @@ protected:
     bool layoutPrimitiveCulling;
     int numTaskEXTPayloads;
 
-    bool nonCoherentTileAttachmentReadQCOM;
-    int  tileShadingRateQCOM[3];
-    bool tileShadingRateQCOMNotDefault[3];
-
     // Base shift values
     std::array<unsigned int, EResCount> shiftBinding;
 
@@ -1314,7 +1249,6 @@ protected:
     bool hlslOffsets;
     bool hlslIoMapping;
     bool useVariablePointers;
-    bool bindingsPerResourceType;
 
     std::set<TString> semanticNameSet;
 
@@ -1326,8 +1260,6 @@ protected:
     bool maximallyReconverges;
     bool usePhysicalStorageBuffer;
     bool useReplicatedComposites { false };
-    bool promoteUint32Indices { false };
-    bool shader64BitIndexing { false };
 
     TSpirvRequirement* spirvRequirement;
     TSpirvExecutionMode* spirvExecutionMode;
@@ -1356,9 +1288,6 @@ protected:
 
     // Included text. First string is a name, second is the included text
     std::map<std::string, std::string> includeText;
-
-    // Maps from canonical symbol name to alias symbol names
-    std::unordered_multimap<std::string, std::string> builtinAliasLookup;
 
     // for OpModuleProcessed, or equivalent
     TProcesses processes;

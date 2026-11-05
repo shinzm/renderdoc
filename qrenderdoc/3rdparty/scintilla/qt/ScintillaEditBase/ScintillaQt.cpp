@@ -616,36 +616,11 @@ void ScintillaQt::StartDrag()
 	SetDragPosition(SelectionPosition(invalidPosition));
 }
 
-class CallTipImpl : public QWidget {
-public:
-	CallTipImpl(CallTip *pct_)
-		: QWidget(nullptr, Qt::ToolTip),
-		  pct(pct_)
-	{
-		setWindowFlag(Qt::WindowTransparentForInput);
-	}
-
-	void paintEvent(QPaintEvent *) override
-	{
-		if (pct->inCallTipMode) {
-			Surface *surfaceWindow = Surface::Allocate(0);
-			surfaceWindow->Init(this);
-			surfaceWindow->SetUnicodeMode(SC_CP_UTF8 == pct->codePage);
-			surfaceWindow->SetDBCSMode(pct->codePage);
-			pct->PaintCT(surfaceWindow);
-			delete surfaceWindow;
-		}
-	}
-
-private:
-	CallTip *pct;
-};
-
 void ScintillaQt::CreateCallTipWindow(PRectangle rc)
 {
 
 	if (!ct.wCallTip.Created()) {
-		QWidget *pCallTip = new CallTipImpl(&ct);
+		QWidget *pCallTip =  new QWidget(0, Qt::ToolTip);
 		ct.wCallTip = pCallTip;
 		pCallTip->move(rc.left, rc.top);
 		pCallTip->resize(rc.Width(), rc.Height());

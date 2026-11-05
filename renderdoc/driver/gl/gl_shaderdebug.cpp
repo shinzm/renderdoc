@@ -164,7 +164,6 @@ public:
     CHECK_DEVICE_THREAD();
     if(!m_ResourcesDirty)
     {
-      m_pDriver->GetReplay()->UseReplayContext();
       GLMarkerRegion region("ResetReplay");
       // replay the action to get back to 'normal' state for this event, and mark that we need to
       // replay back to pristine state next time we need to fetch data.
@@ -685,6 +684,8 @@ public:
       return false;
     }
 
+    GLMarkerRegion markerRegion("QueueSampleGather");
+
     GLResource texture = m_pDriver->GetResourceManager()->GetResource(imageDescriptor.resource);
     GLResource bufTexture =
         m_pDriver->GetResourceManager()->GetResource(bufferViewDescriptor.resource);
@@ -1154,8 +1155,6 @@ public:
         uniformParams.dynoffset.z = offset.value.s32v[2];
     }
 
-    m_pDriver->GetReplay()->UseReplayContext();
-
     GLuint prog = m_pDriver->GetReplay()->MakeShaderDebugSampleProg(config);
 
     if(prog == 0)
@@ -1166,7 +1165,7 @@ public:
       return false;
     }
 
-    GLMarkerRegion markerRegion("QueueSampleGather");
+    m_pDriver->GetReplay()->UseReplayContext();
 
     GLRenderState rs;
     rs.FetchState(m_pDriver);
@@ -1277,20 +1276,17 @@ public:
     return true;
   }
 
-  virtual bool QueueCalculateMathOp(rdcspv::Op opcode, rdcspv::GLSLstd450 glslop,
+  virtual bool QueueCalculateMathOp(rdcspv::GLSLstd450 op,
                                     const rdcarray<ShaderVariable> &params) override
   {
     CHECK_DEVICE_THREAD();
     RDCASSERT(params.size() <= 3, params.size());
 
-    // only support GLSL std450 ops
-    RDCASSERT(opcode == rdcspv::Op::ExtInst && glslop != rdcspv::GLSLstd450::Invalid, opcode, glslop);
-
     RDCASSERTEQUAL(params[0].type, VarType::Float);
 
-    m_pDriver->GetReplay()->UseDebugContext();
-
     GLMarkerRegion markerRegion("QueueCalculateMathOp");
+
+    m_pDriver->GetReplay()->UseReplayContext();
 
     GLRenderState rs;
     rs.FetchState(m_pDriver);
@@ -1367,7 +1363,7 @@ public:
     }
 
     // push the operation afterwards
-    GL.glUniform1i(GL.glGetUniformLocation(mathProg, "op"), (int32_t)glslop);
+    GL.glUniform1i(GL.glGetUniformLocation(mathProg, "op"), (int32_t)op);
 
     GL.glDispatchCompute(1, 1, 1);
 
@@ -1380,9 +1376,6 @@ public:
                                 rdcarray<ShaderVariable *> &sampleGatherResults) override
   {
     CHECK_DEVICE_THREAD();
-
-    GLuint oldbuf = 0;
-    GL.glGetIntegerv(eGL_COPY_READ_BUFFER_BINDING, (GLint *)&oldbuf);
 
     bytebuf gpuResults;
     gpuResults.resize(m_MathBufferSize + m_SampleBufferSize);
@@ -1437,8 +1430,6 @@ public:
       }
       gpuSampleGatherOpResults += sampleGatherOpResultByteSize;
     }
-
-    GL.glBindBuffer(eGL_COPY_READ_BUFFER, oldbuf);
 
     return true;
   }
@@ -1729,7 +1720,6 @@ private:
       // before it.
       if(m_ResourcesDirty)
       {
-        m_pDriver->GetReplay()->UseReplayContext();
         GLMarkerRegion region("un-dirtying resources");
         m_pDriver->GetReplay()->ReplayLog(m_EventID, eReplay_WithoutDraw);
         m_ResourcesDirty = false;
@@ -1763,7 +1753,6 @@ private:
       // before it.
       if(m_ResourcesDirty)
       {
-        m_pDriver->GetReplay()->UseReplayContext();
         GLMarkerRegion region("un-dirtying resources");
         m_pDriver->GetReplay()->ReplayLog(m_EventID, eReplay_WithoutDraw);
         m_ResourcesDirty = false;
@@ -1938,25 +1927,13 @@ static bool DeclareSignatureElement(const ShaderReflection *refl, size_t i, rdcs
   if(name.beginsWith("gl_"))
     name.insert(0, '_');
 
-  VarType varType = sig.varType;
-
-  // bool in/out variables are not allowed in GLSL but these two builtins may come back as bool from
-  // SPIR-V reflection (GL reflection will type them as ints). Ensure this matches the uint-coerced
-  // value in CreateInputFetcher()
-  if(varType == VarType::Bool)
-  {
-    RDCASSERT(sig.systemValue == ShaderBuiltin::IsFrontFace ||
-              sig.systemValue == ShaderBuiltin::IsHelper);
-    varType = VarType::UInt;
-  }
-
-  char prefix = (varType == VarType::Float)  ? ' '
-                : (varType == VarType::UInt) ? 'u'
-                : (varType == VarType::SInt) ? 'i'
-                                             : 'x';
+  char prefix = (sig.varType == VarType::Float)  ? ' '
+                : (sig.varType == VarType::UInt) ? 'u'
+                : (sig.varType == VarType::SInt) ? 'i'
+                                                 : 'x';
   if(sig.compCount == 1)
   {
-    sigDecl += ToStr(varType);
+    sigDecl += ToStr(sig.varType);
   }
   else
   {
@@ -2471,12 +2448,10 @@ struct ResultData
   uvec4 helperBallot;
 
   uint numSubgroups;
-  uint shadRate; // unused, matches declaration & vulkan
+  // split out because we use std140 packing which won't pack {uint, uvec3}
   uint pad1;
   uint pad2;
-
-  // padding so overall struct size is 8-byte aligned for if LaneData contains 8-byte data
-  uvec4 paddingForDoubles;
+  uint pad3;
 
   LaneData laneData[NUMLANES];
 };
@@ -2489,9 +2464,6 @@ layout(std140) buffer Output
   uint hit_count;
   uint total_count;
   uvec2 pad;
-
-  // extra padding so the offset of ResultData is 8-byte aligned in case we have user 8-byte inputs
-  uvec4 paddingForDoubles;
   
   ResultData hits[];
 } outbuffer;
@@ -3146,7 +3118,7 @@ ShaderDebugTrace *GLReplay::DebugVertex(uint32_t eventId, uint32_t vertid, uint3
   (void)hit_count;
   // RDCASSERTMSG("Should only get one hit for vertex shaders", hit_count == 1, hit_count);
 
-  base += offsetof(rdcspv::ResultBaseBuffer, hits);
+  base += sizeof(Vec4f);
 
   rdcspv::ResultDataBase *winner = (rdcspv::ResultDataBase *)base;
 
@@ -3560,7 +3532,7 @@ ShaderDebugTrace *GLReplay::DebugPixel(uint32_t eventId, uint32_t x, uint32_t y,
     hit_count = maxHits;
   }
 
-  base += offsetof(rdcspv::ResultBaseBuffer, hits);
+  base += sizeof(Vec4f);
 
   rdcspv::ResultDataBase *winner = NULL;
 
@@ -4020,7 +3992,7 @@ ShaderDebugTrace *GLReplay::DebugThread(uint32_t eventId, const rdcfixedarray<ui
       hit_count = maxHits;
     }
 
-    base += offsetof(rdcspv::ResultBaseBuffer, hits);
+    base += sizeof(Vec4f);
 
     rdcspv::ResultDataBase *winner = (rdcspv::ResultDataBase *)base;
 
@@ -4302,16 +4274,12 @@ rdcarray<ShaderDebugState> GLReplay::ContinueDebug(ShaderDebugger *debugger)
   if(!spvDebugger)
     return {};
 
-  m_pDriver->GetReplay()->UseReplayContext();
-
   GLMarkerRegion region("ContinueDebug Simulation Loop");
 
   rdcarray<ShaderDebugState> ret = spvDebugger->ContinueDebug();
 
   GLAPIWrapper *api = (GLAPIWrapper *)spvDebugger->GetAPIWrapper();
   api->ResetReplay();
-
-  m_pDriver->GetReplay()->UseReplayContext();
 
   return ret;
 }

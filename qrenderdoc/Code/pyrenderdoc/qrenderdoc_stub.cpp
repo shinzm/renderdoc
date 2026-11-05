@@ -40,6 +40,7 @@ CaptureSettings::CaptureSettings()
   autoStart = false;
   queuedFrameCap = 0;
   numQueuedFrames = 0;
+  RENDERDOC_GetDefaultCaptureOptions(&options);
 }
 
 rdcstr ConfigFilePath(const rdcstr &filename)
@@ -93,7 +94,7 @@ ShaderToolOutput ShaderProcessingTool::CompileShader(QWidget *window, rdcstr sou
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// PersistentConfig.cpp stubs
+// PersistantConfig.cpp stubs
 ////////////////////////////////////////////////////////////////////////////////
 
 rdcstr BugReport::URL() const
@@ -101,56 +102,56 @@ rdcstr BugReport::URL() const
   return "";
 }
 
-bool PersistentConfig::SetStyle()
+bool PersistantConfig::SetStyle()
 {
   return false;
 }
 
-PersistentConfig::PersistentConfig()
+PersistantConfig::PersistantConfig()
 {
 }
 
-PersistentConfig::~PersistentConfig()
+PersistantConfig::~PersistantConfig()
 {
 }
 
-bool PersistentConfig::Load(const rdcstr &filename)
-{
-  return false;
-}
-
-bool PersistentConfig::Save()
+bool PersistantConfig::Load(const rdcstr &filename)
 {
   return false;
 }
 
-void PersistentConfig::Close()
+bool PersistantConfig::Save()
+{
+  return false;
+}
+
+void PersistantConfig::Close()
 {
 }
 
-rdcarray<RemoteHost> PersistentConfig::GetRemoteHosts()
+rdcarray<RemoteHost> PersistantConfig::GetRemoteHosts()
 {
   return {};
 }
 
-RemoteHost PersistentConfig::GetRemoteHost(const rdcstr &)
+RemoteHost PersistantConfig::GetRemoteHost(const rdcstr &)
 {
   return RemoteHost();
 }
 
-void PersistentConfig::AddRemoteHost(RemoteHost host)
+void PersistantConfig::AddRemoteHost(RemoteHost host)
 {
 }
 
-void PersistentConfig::RemoveRemoteHost(RemoteHost host)
+void PersistantConfig::RemoveRemoteHost(RemoteHost host)
 {
 }
 
-void PersistentConfig::UpdateEnumeratedProtocolDevices()
+void PersistantConfig::UpdateEnumeratedProtocolDevices()
 {
 }
 
-void PersistentConfig::SetupFormatting()
+void PersistantConfig::SetupFormatting()
 {
 }
 
@@ -259,49 +260,4 @@ void RemoteHost::SetConnected(bool connected)
 
 void RemoteHost::SetShutdown()
 {
-}
-
-ICaptureContext *BufferInterpreter::context = NULL;
-
-ParsedBufferFormat BufferInterpreter::Parse(rdcstr format)
-{
-  return {};
-}
-
-rdcstr BufferInterpreter::Unparse(ShaderConstantType structType, PackingRules pack, ResourceId shader)
-{
-  return rdcstr();
-}
-
-PackingRules BufferInterpreter::EstimatePackingRules(ShaderConstantType baseType, ResourceId shader)
-{
-  return PackingRules();
-}
-
-ShaderConstantType BufferInterpreter::GetPointerValType(PointerVal val)
-{
-  return ShaderConstantType();
-}
-
-ShaderConstantType BufferInterpreter::GetPointerType(uint32_t pointerTypeId, ResourceId shader)
-{
-  return ShaderConstantType();
-}
-
-rdcpair<ResourceId, uint64_t> BufferInterpreter::LookupPointer(uint64_t pointerAddress,
-                                                               uint64_t minSize /*= 0*/)
-{
-  return {ResourceId(), 0};
-}
-
-uint32_t BufferInterpreter::GetVariableAdvance(PackingRules pack, const ShaderConstant &var)
-{
-  return 0;
-}
-
-rdcarray<ShaderVariable> BufferInterpreter::GetShaderVariables(const ShaderConstant &elem,
-                                                               const bytebuf &data,
-                                                               int32_t maxVariables)
-{
-  return {};
 }

@@ -27,19 +27,12 @@
 
 #include "apidefs.h"
 #include "rdcarray.h"
-#include "rdcpair.h"
 #include "replay_enums.h"
 #include "resourceid.h"
 #include "stringise.h"
 #include "structured_data.h"
 
-DOCUMENT(R"(
-FloatVector()
-FloatVector(other: FloatVector)
-FloatVector(x: float, y: float, z: float, w: float)
-
-A floating point four-component vector
-)");
+DOCUMENT("A floating point four-component vector");
 struct FloatVector
 {
   DOCUMENT("");
@@ -93,13 +86,7 @@ struct FloatVector
 
 DECLARE_REFLECTION_STRUCT(FloatVector);
 
-DOCUMENT(R"(
-AxisMapping()
-AxisMapping(other: AxisMapping)
-AxisMapping(xAxis: FloatVector, yAxis: FloatVector, zAxis: FloatVector)
-
-A transform to map the x, y, and z axes to new directions.
-)");
+DOCUMENT("A transform to map the x, y, and z axes to new directions.");
 struct AxisMapping
 {
   AxisMapping()
@@ -133,13 +120,7 @@ struct AxisMapping
 
 DECLARE_REFLECTION_STRUCT(AxisMapping);
 
-DOCUMENT(R"(
-PathEntry()
-PathEntry(other: PathEntry)
-PathEntry(filename: str, flags: PathProperty)
-
-Properties of a path on a remote filesystem.
-)");
+DOCUMENT("Properties of a path on a remote filesystem.");
 struct PathEntry
 {
   DOCUMENT("");
@@ -190,12 +171,7 @@ struct PathEntry
 
 DECLARE_REFLECTION_STRUCT(PathEntry);
 
-DOCUMENT(R"(
-SectionProperties()
-SectionProperties(other: SectionProperties)
-
-Properties of a section in a renderdoc capture file.
-)");
+DOCUMENT("Properties of a section in a renderdoc capture file.");
 struct SectionProperties
 {
   DOCUMENT("");
@@ -249,12 +225,7 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_ResourceFormatName(const Re
                                                                         rdcstr &name);
 #endif
 
-DOCUMENT(R"(
-ResourceFormat()
-ResourceFormat(other: ResourceFormat)
-
-Description of the format of a resource or element.
-)");
+DOCUMENT("Description of the format of a resource or element.");
 struct ResourceFormat
 {
   DOCUMENT("");
@@ -429,161 +400,6 @@ Invalid values will result in 1 being set.
     return false;
   }
 
-  DOCUMENT(R"(Set PVRTC properties. See :meth:`PVRTCVersion` and :meth:`PVRTCBpp`.
-
-Invalid values will result in undefined format properties. Has no effect if the format is
-not already set to be PVRTC.
-
-:param int version: The PVRTC version.
-:param int bpp: The bits per pixel of the PVRTC blocks.
-)");
-  void SetPVRTC(uint32_t version, uint32_t bpp)
-  {
-    if(type != ResourceFormatType::PVRTC)
-      return;
-
-    flags &= ~ResourceFormat_PVRTC_Mask;
-    flags |= (version == 1) ? ResourceFormat_PVRTC_v1 : ResourceFormat_PVRTC_v2;
-    flags |= (bpp == 2) ? ResourceFormat_PVRTC_8x4_2bpp : ResourceFormat_PVRTC_4x4_4bpp;
-  }
-
-  DOCUMENT(R"(For PVRTC formats, return the version of PVRTC used either 1 or 2.
-
-Will return 0 if the format is not PVRTC.
-
-:return: The version of the current PVRTC format
-:rtype: int
-)");
-  uint32_t PVRTCVersion() const
-  {
-    if(type != ResourceFormatType::PVRTC)
-      return 0;
-
-    return (flags & ResourceFormat_PVRTC_v1) ? 1 : 2;
-  }
-
-  DOCUMENT(R"(For PVRTC formats, return the bits per pixel rate either 2 or 4. This can also be
-thought of as the block shape since each block is 64-bit. 2bpp is 8x4 and 4bpp is 4x4.
-
-Will return 0 if the format is not PVRTC.
-
-:return: The bpp of the current PVRTC format
-:rtype: int
-)");
-  uint32_t PVRTCBpp() const
-  {
-    if(type != ResourceFormatType::PVRTC)
-      return 0;
-
-    return (flags & ResourceFormat_PVRTC_8x4_2bpp) ? 2 : 4;
-  }
-
-  DOCUMENT(R"(Set 2D ASTC block properties. See :meth:`ASTCDimension` and :meth:`ASTC2DBlock`.
-
-Invalid values will result in undefined format properties. Has no effect if the format is
-not already set to be ASTC.
-
-:param Tuple[int,int] block2D: The 2D block shape.
-)");
-  void SetASTC2D(const rdcpair<uint32_t, uint32_t> &block2D)
-  {
-    if(type != ResourceFormatType::ASTC)
-      return;
-
-    flags &= ~ResourceFormat_ASTC_Mask;
-
-    flags |= uint16_t(block2D.first << ResourceFormat_ASTC_2DWidth_Shift);
-    flags |= uint16_t(block2D.second << ResourceFormat_ASTC_2DHeight_Shift);
-  }
-
-  DOCUMENT(R"(Set 3D ASTC block properties. See :meth:`ASTCDimension` and :meth:`ASTC3DBlock`.
-
-Invalid values will result in undefined format properties. Has no effect if the format is
-not already set to be ASTC.
-
-:param Tuple[int,int,int] block3D: The 3D block shape.
-)");
-  void SetASTC3D(const rdcfixedarray<uint32_t, 3> &block3D)
-  {
-    if(type != ResourceFormatType::ASTC)
-      return;
-
-    flags &= ~ResourceFormat_ASTC_Mask;
-    flags |= ResourceFormat_ASTC_3D;
-
-    uint32_t w = block3D[0] - ResourceFormat_ASTC_3D_Base;
-    uint32_t h = block3D[1] - ResourceFormat_ASTC_3D_Base;
-    uint32_t d = block3D[2] - ResourceFormat_ASTC_3D_Base;
-
-    w <<= ResourceFormat_ASTC_3DWidth_Shift;
-    h <<= ResourceFormat_ASTC_3DHeight_Shift;
-    d <<= ResourceFormat_ASTC_3DDepth_Shift;
-
-    w &= ResourceFormat_ASTC_3DWidth_Mask;
-    h &= ResourceFormat_ASTC_3DHeight_Mask;
-    d &= ResourceFormat_ASTC_3DDepth_Mask;
-
-    flags |= uint16_t(w);
-    flags |= uint16_t(h);
-    flags |= uint16_t(d);
-  }
-
-  DOCUMENT(R"(For ASTC formats, return the dimension of the block either 2 or 3.
-
-Will return 0 if the format is not ASTC.
-
-:return: The dimension of the blocks in the current ASTC format
-:rtype: int
-)");
-  uint32_t ASTCDimension() const
-  {
-    if(type != ResourceFormatType::ASTC)
-      return 0;
-
-    return (flags & ResourceFormat_ASTC_3D) ? 3 : 2;
-  }
-
-  DOCUMENT(R"(For 2D ASTC formats, return the block shape.
-
-Will return all 0s if the format is not ASTC or is not 2D. See :meth:`ASTCDimension`.
-
-:return: The block shape if the format is 2D ASTC
-:rtype: Tuple[int, int]
-)");
-  rdcpair<uint32_t, uint32_t> ASTC2DBlock() const
-  {
-    if(type != ResourceFormatType::ASTC)
-      return {0, 0};
-
-    return {
-        uint32_t((flags & ResourceFormat_ASTC_2DWidth_Mask) >> ResourceFormat_ASTC_2DWidth_Shift),
-        uint32_t((flags & ResourceFormat_ASTC_2DHeight_Mask) >> ResourceFormat_ASTC_2DHeight_Shift),
-    };
-  }
-
-  DOCUMENT(R"(For 3D ASTC formats, return the block shape.
-
-Will return all 0s if the format is not ASTC or is not 3D. See :meth:`ASTCDimension`.
-
-:return: The block shape if the format is 3D ASTC
-:rtype: Tuple[int, int, int]
-)");
-  rdcfixedarray<uint32_t, 3> ASTC3DBlock() const
-  {
-    if(type != ResourceFormatType::ASTC)
-      return {0, 0};
-
-    uint32_t w = (flags & ResourceFormat_ASTC_3DWidth_Mask) >> ResourceFormat_ASTC_3DWidth_Shift;
-    uint32_t h = (flags & ResourceFormat_ASTC_3DHeight_Mask) >> ResourceFormat_ASTC_3DHeight_Shift;
-    uint32_t d = (flags & ResourceFormat_ASTC_3DDepth_Mask) >> ResourceFormat_ASTC_3DDepth_Shift;
-
-    return {
-        ResourceFormat_ASTC_3D_Base + w,
-        ResourceFormat_ASTC_3D_Base + h,
-        ResourceFormat_ASTC_3D_Base + d,
-    };
-  }
-
   DOCUMENT(R"(Return the size of a single element in this format, usually a pixel. For regular sized
 formats this is just :data:`compByteWidth` times :data:`compCount`, for special packed formats it's
 the tightly packed size of a single element, with no padding.
@@ -638,7 +454,7 @@ texel.
       case ResourceFormatType::YUV12:
       case ResourceFormatType::YUV16: return compCount * 2;
       case ResourceFormatType::PVRTC:
-        return 8;    // PVRTC is always 64 bits per block, either 4x4 on 4bpp or 8x4 on 2bpp
+        return 8;    // our representation can't differentiate 2bpp from 4bpp, so guess
     }
 
     return 0;
@@ -671,7 +487,6 @@ private:
   enum
   {
     ResourceFormat_BGRA = 0x001,
-    ResourceFormat_ASTC_3D = 0x0002,
 
     ResourceFormat_444 = 0x004,
     ResourceFormat_422 = 0x008,
@@ -681,27 +496,6 @@ private:
     ResourceFormat_2Planes = 0x020,
     ResourceFormat_3Planes = 0x040,
     ResourceFormat_Planes_Mask = 0x060,
-
-    ResourceFormat_PVRTC_v1 = 0x0100,
-    ResourceFormat_PVRTC_v2 = 0x0200,
-    ResourceFormat_PVRTC_4x4_4bpp = 0x0400,
-    ResourceFormat_PVRTC_8x4_2bpp = 0x0800,
-    ResourceFormat_PVRTC_Mask = 0x0f00,
-
-    ResourceFormat_ASTC_2DWidth_Shift = 8,
-    ResourceFormat_ASTC_2DWidth_Mask = (0xf << ResourceFormat_ASTC_2DWidth_Shift),
-    ResourceFormat_ASTC_2DHeight_Shift = 12,
-    ResourceFormat_ASTC_2DHeight_Mask = (0xf << ResourceFormat_ASTC_2DHeight_Shift),
-
-    ResourceFormat_ASTC_3D_Base = 3,
-    ResourceFormat_ASTC_3DWidth_Shift = 10,
-    ResourceFormat_ASTC_3DWidth_Mask = (0x3 << ResourceFormat_ASTC_3DWidth_Shift),
-    ResourceFormat_ASTC_3DHeight_Shift = 12,
-    ResourceFormat_ASTC_3DHeight_Mask = (0x3 << ResourceFormat_ASTC_3DHeight_Shift),
-    ResourceFormat_ASTC_3DDepth_Shift = 14,
-    ResourceFormat_ASTC_3DDepth_Mask = (0x3 << ResourceFormat_ASTC_3DDepth_Shift),
-
-    ResourceFormat_ASTC_Mask = 0xff00,
   };
   uint16_t flags;
 
@@ -712,12 +506,7 @@ private:
 
 DECLARE_REFLECTION_STRUCT(ResourceFormat);
 
-DOCUMENT(R"(
-TextureFilter()
-TextureFilter(other: TextureFilter)
-
-The details of a texture filter in a sampler.
-)");
+DOCUMENT("The details of a texture filter in a sampler.");
 struct TextureFilter
 {
   DOCUMENT("");
@@ -765,12 +554,7 @@ struct TextureFilter
 
 DECLARE_REFLECTION_STRUCT(TextureFilter);
 
-DOCUMENT(R"(
-TextureSwizzle4()
-TextureSwizzle4(other: TextureSwizzle4)
-
-The four components of a texture swizzle.
-)");
+DOCUMENT("The four components of a texture swizzle.");
 struct TextureSwizzle4
 {
   DOCUMENT("");
@@ -819,12 +603,7 @@ struct TextureSwizzle4
 
 DECLARE_REFLECTION_STRUCT(TextureSwizzle4);
 
-DOCUMENT(R"(
-ResourceDescription()
-ResourceDescription(other: ResourceDescription)
-
-A description of any type of resource.
-)");
+DOCUMENT("A description of any type of resource.");
 struct ResourceDescription
 {
   DOCUMENT("");
@@ -862,7 +641,7 @@ human-readable name by the application.
 
   DOCUMENT(R"(The chunk indices in the structured file that initialised this resource.
 
-This will at least contain the first call that created it, but may contain other auxiliary calls.
+This will at least contain the first call that created it, but may contain other auxilliary calls.
 
 :type: List[int]
 )");
@@ -893,7 +672,7 @@ typically it is one parent to many derived.
   DOCUMENT(R"(An optional set of annotations associated with this resource, may be ``None`` if
 annotations are not used.
 
-:type: Optional[SDObject]
+:type: SDObject
 )");
   SDObject *annotations = NULL;
 
@@ -910,12 +689,7 @@ annotations are not used.
 
 DECLARE_REFLECTION_STRUCT(ResourceDescription);
 
-DOCUMENT(R"(
-DescriptorStoreDescription()
-DescriptorStoreDescription(other: DescriptorStoreDescription)
-
-A description of a descriptor store.
-)");
+DOCUMENT("A description of a descriptor store.");
 struct DescriptorStoreDescription
 {
   DOCUMENT("");
@@ -937,7 +711,7 @@ struct DescriptorStoreDescription
 )");
   ResourceId resourceId;
 
-  DOCUMENT(R"(For descriptor stores which contain descriptors all of identical size, the size of each
+  DOCUMENT(R"(For descriptor stores which contain desriptors all of identical size, the size of each
 descriptor. Descriptors are assumed to be tightly packed so stride is equal to size.
 
 :type: int
@@ -959,12 +733,7 @@ descriptor. Descriptors are assumed to be tightly packed so stride is equal to s
 
 DECLARE_REFLECTION_STRUCT(DescriptorStoreDescription);
 
-DOCUMENT(R"(
-BufferDescription()
-BufferDescription(other: BufferDescription)
-
-A description of a buffer resource.
-)");
+DOCUMENT("A description of a buffer resource.");
 struct BufferDescription
 {
   DOCUMENT("");
@@ -975,8 +744,7 @@ struct BufferDescription
   bool operator==(const BufferDescription &o) const
   {
     return resourceId == o.resourceId && creationFlags == o.creationFlags &&
-           gpuAddress == o.gpuAddress && length == o.length && memory == o.memory &&
-           memoryOffset == o.memoryOffset;
+           gpuAddress == o.gpuAddress && length == o.length;
   }
   bool operator<(const BufferDescription &o) const
   {
@@ -988,10 +756,6 @@ struct BufferDescription
       return gpuAddress < o.gpuAddress;
     if(!(length == o.length))
       return length < o.length;
-    if(!(memory == o.memory))
-      return memory < o.memory;
-    if(!(memoryOffset == o.memoryOffset))
-      return memoryOffset < o.memoryOffset;
     return false;
   }
   DOCUMENT(R"(The unique :class:`ResourceId` that identifies this buffer.
@@ -1017,31 +781,11 @@ struct BufferDescription
 :type: int
 )");
   uint64_t length = 0;
-
-  DOCUMENT(R"(The unique :class:`ResourceId` that identifies the memory object this
-buffer has a fixed binding to. For objects that do not have an explicit memory binding
-or for sparse buffers, this will not be set.
-
-:type: ResourceId
-)");
-  ResourceId memory;
-
-  DOCUMENT(R"(The byte offset in :data:`memory` where the buffer is bound. If
-:data:`memory` is unset, this will be 0.
-
-:type: int
-)");
-  uint64_t memoryOffset = 0;
 };
 
 DECLARE_REFLECTION_STRUCT(BufferDescription);
 
-DOCUMENT(R"(
-TextureDescription()
-TextureDescription(other: TextureDescription)
-
-A description of a texture resource.
-)");
+DOCUMENT("A description of a texture resource.");
 struct TextureDescription
 {
   DOCUMENT("");
@@ -1055,7 +799,7 @@ struct TextureDescription
            height == o.height && depth == o.depth && resourceId == o.resourceId &&
            cubemap == o.cubemap && mips == o.mips && arraysize == o.arraysize &&
            creationFlags == o.creationFlags && msQual == o.msQual && msSamp == o.msSamp &&
-           byteSize == o.byteSize && memory == o.memory && memoryOffset == o.memoryOffset;
+           byteSize == o.byteSize;
   }
   bool operator<(const TextureDescription &o) const
   {
@@ -1087,10 +831,6 @@ struct TextureDescription
       return msSamp < o.msSamp;
     if(!(byteSize == o.byteSize))
       return byteSize < o.byteSize;
-    if(!(memory == o.memory))
-      return memory < o.memory;
-    if(!(memoryOffset == o.memoryOffset))
-      return memoryOffset < o.memoryOffset;
     return false;
   }
   DOCUMENT(R"(The format of each pixel in the texture.
@@ -1176,30 +916,11 @@ struct TextureDescription
 :type: int
 )");
   uint64_t byteSize;
-
-  DOCUMENT(R"(The unique :class:`ResourceId` that identifies the memory object this
-texture has a fixed binding to. For objects that do not have an explicit memory binding
-or for sparse textures, this will not be set.
-
-:type: ResourceId
-)");
-  ResourceId memory;
-
-  DOCUMENT(R"(The byte offset in :data:`memory` where the texture is bound. If
-:data:`memory` is unset, this will be 0.
-
-:type: int
-)");
-  uint64_t memoryOffset = 0;
 };
 
 DECLARE_REFLECTION_STRUCT(TextureDescription);
 
-DOCUMENT(R"(
-APIEvent()
-APIEvent(other: APIEvent)
-
-An individual API-level event, generally corresponds one-to-one with an API call.
+DOCUMENT(R"(An individual API-level event, generally corresponds one-to-one with an API call.
 
 .. data:: NoChunk
 
@@ -1253,7 +974,7 @@ markers added to the capture after load.
   DOCUMENT(R"(An optional set of annotations associated with this event, may be ``None`` if
 annotations are not used.
 
-:type: Optional[SDObject]
+:type: SDObject
 )");
   SDObject *annotations = NULL;
 
@@ -1262,12 +983,7 @@ annotations are not used.
 
 DECLARE_REFLECTION_STRUCT(APIEvent);
 
-DOCUMENT(R"(
-DebugMessage()
-DebugMessage(other: DebugMessage)
-
-A debugging message from the API validation or internal analysis and error detection.
-)");
+DOCUMENT("A debugging message from the API validation or internal analysis and error detection.");
 struct DebugMessage
 {
   DOCUMENT("");
@@ -1354,11 +1070,7 @@ enum class BucketRecordType : int
 };
 DECLARE_REFLECTION_ENUM(BucketRecordType);
 
-DOCUMENT(R"(
-ConstantBindStats()
-ConstantBindStats(other: ConstantBindStats)
-
-Contains the statistics for constant binds in a frame.
+DOCUMENT(R"(Contains the statistics for constant binds in a frame.
 
 .. data:: BucketType
 
@@ -1429,12 +1141,7 @@ struct ConstantBindStats
 
 DECLARE_REFLECTION_STRUCT(ConstantBindStats);
 
-DOCUMENT(R"(
-SamplerBindStats()
-SamplerBindStats(other: SamplerBindStats)
-
-Contains the statistics for sampler binds in a frame.
-)");
+DOCUMENT("Contains the statistics for sampler binds in a frame.");
 struct SamplerBindStats
 {
   DOCUMENT("");
@@ -1484,12 +1191,7 @@ struct SamplerBindStats
 
 DECLARE_REFLECTION_STRUCT(SamplerBindStats);
 
-DOCUMENT(R"(
-ResourceBindStats()
-ResourceBindStats(other: ResourceBindStats)
-
-Contains the statistics for resource binds in a frame.
-)");
+DOCUMENT("Contains the statistics for resource binds in a frame.");
 struct ResourceBindStats
 {
   DOCUMENT("");
@@ -1550,11 +1252,7 @@ The Nth element contains the number of times a resource of that type was bound.
 
 DECLARE_REFLECTION_STRUCT(ResourceBindStats);
 
-DOCUMENT(R"(
-ResourceUpdateStats()
-ResourceUpdateStats(other: ResourceUpdateStats)
-
-Contains the statistics for resource updates in a frame.
+DOCUMENT(R"(Contains the statistics for resource updates in a frame.
 
 .. data:: BucketType
 
@@ -1609,11 +1307,7 @@ The Nth element contains the number of times a resource of that type was updated
 
 DECLARE_REFLECTION_STRUCT(ResourceUpdateStats);
 
-DOCUMENT(R"(
-DrawcallStats()
-DrawcallStats(other: DrawcallStats)
-
-Contains the statistics for draws in a frame.
+DOCUMENT(R"(Contains the statistics for draws in a frame.
 
 .. data:: BucketType
 
@@ -1663,12 +1357,7 @@ struct DrawcallStats
 
 DECLARE_REFLECTION_STRUCT(DrawcallStats);
 
-DOCUMENT(R"(
-DispatchStats()
-DispatchStats(other: DispatchStats)
-
-Contains the statistics for compute dispatches in a frame.
-)");
+DOCUMENT("Contains the statistics for compute dispatches in a frame.");
 struct DispatchStats
 {
   DOCUMENT("");
@@ -1691,12 +1380,7 @@ struct DispatchStats
 
 DECLARE_REFLECTION_STRUCT(DispatchStats);
 
-DOCUMENT(R"(
-IndexBindStats()
-IndexBindStats(other: IndexBindStats)
-
-Contains the statistics for index buffer binds in a frame.
-)");
+DOCUMENT("Contains the statistics for index buffer binds in a frame.");
 struct IndexBindStats
 {
   DOCUMENT("");
@@ -1725,12 +1409,7 @@ struct IndexBindStats
 
 DECLARE_REFLECTION_STRUCT(IndexBindStats);
 
-DOCUMENT(R"(
-VertexBindStats()
-VertexBindStats(other: VertexBindStats)
-
-Contains the statistics for vertex buffer binds in a frame.
-)");
+DOCUMENT("Contains the statistics for vertex buffer binds in a frame.");
 struct VertexBindStats
 {
   DOCUMENT("");
@@ -1765,12 +1444,7 @@ struct VertexBindStats
 
 DECLARE_REFLECTION_STRUCT(VertexBindStats);
 
-DOCUMENT(R"(
-LayoutBindStats()
-LayoutBindStats(other: LayoutBindStats)
-
-Contains the statistics for vertex layout binds in a frame.
-)");
+DOCUMENT("Contains the statistics for vertex layout binds in a frame.");
 struct LayoutBindStats
 {
   DOCUMENT("");
@@ -1799,12 +1473,7 @@ struct LayoutBindStats
 
 DECLARE_REFLECTION_STRUCT(LayoutBindStats);
 
-DOCUMENT(R"(
-ShaderChangeStats()
-ShaderChangeStats(other: ShaderChangeStats)
-
-Contains the statistics for shader binds in a frame.
-)");
+DOCUMENT("Contains the statistics for shader binds in a frame.");
 struct ShaderChangeStats
 {
   DOCUMENT("");
@@ -1854,12 +1523,7 @@ struct ShaderChangeStats
 
 DECLARE_REFLECTION_STRUCT(ShaderChangeStats);
 
-DOCUMENT(R"(
-BlendStats()
-BlendStats(other: BlendStats)
-
-Contains the statistics for blend state binds in a frame.
-)");
+DOCUMENT("Contains the statistics for blend state binds in a frame.");
 struct BlendStats
 {
   DOCUMENT("");
@@ -1894,12 +1558,7 @@ struct BlendStats
 
 DECLARE_REFLECTION_STRUCT(BlendStats);
 
-DOCUMENT(R"(
-DepthStencilStats()
-DepthStencilStats(other: DepthStencilStats)
-
-Contains the statistics for depth stencil state binds in a frame.
-)");
+DOCUMENT("Contains the statistics for depth stencil state binds in a frame.");
 struct DepthStencilStats
 {
   DOCUMENT("");
@@ -1934,12 +1593,7 @@ struct DepthStencilStats
 
 DECLARE_REFLECTION_STRUCT(DepthStencilStats);
 
-DOCUMENT(R"(
-RasterizationStats()
-RasterizationStats(other: RasterizationStats)
-
-Contains the statistics for rasterizer state binds in a frame.
-)");
+DOCUMENT("Contains the statistics for rasterizer state binds in a frame.");
 struct RasterizationStats
 {
   DOCUMENT("");
@@ -1986,12 +1640,7 @@ struct RasterizationStats
 
 DECLARE_REFLECTION_STRUCT(RasterizationStats);
 
-DOCUMENT(R"(
-OutputTargetStats()
-OutputTargetStats(other: OutputTargetStats)
-
-Contains the statistics for output merger or UAV binds in a frame.
-)");
+DOCUMENT("Contains the statistics for output merger or UAV binds in a frame.");
 struct OutputTargetStats
 {
   DOCUMENT("");
@@ -2026,11 +1675,7 @@ struct OutputTargetStats
 
 DECLARE_REFLECTION_STRUCT(OutputTargetStats);
 
-DOCUMENT(R"(
-FrameStatistics()
-FrameStatistics(other: FrameStatistics)
-
-Contains all the available statistics about the captured frame.
+DOCUMENT(R"(Contains all the available statistics about the captured frame.
 
 Currently this information is only available on D3D11 and is fairly API-centric.
 )");
@@ -2140,11 +1785,7 @@ struct FrameStatistics
 
 DECLARE_REFLECTION_STRUCT(FrameStatistics);
 
-DOCUMENT(R"(
-FrameDescription()
-FrameDescription(other: FrameDescription)
-
-Contains frame-level global information
+DOCUMENT(R"(Contains frame-level global information
 
 .. data:: NoFrameNumber
 
@@ -2239,19 +1880,15 @@ this counts the frame number when the capture was made.
 
 DECLARE_REFLECTION_STRUCT(FrameDescription);
 
-DOCUMENT(R"(
-EventUsage()
-EventUsage(other: EventUsage)
-EventUsage(eventId: int, usage: ResourceUsage)
-
-Describes a particular use of a resource at a specific :data:`eventId <APIEvent.eventId>`.
-)");
+DOCUMENT(
+    "Describes a particular use of a resource at a specific :data:`eventId <APIEvent.eventId>`.");
 struct EventUsage
 {
   DOCUMENT("");
   EventUsage() : eventId(0), usage(ResourceUsage::Unused) {}
   EventUsage(const EventUsage &) = default;
   EventUsage(uint32_t e, ResourceUsage u) : eventId(e), usage(u) {}
+  EventUsage(uint32_t e, ResourceUsage u, ResourceId v) : eventId(e), usage(u), view(v) {}
   EventUsage &operator=(const EventUsage &) = default;
   bool operator<(const EventUsage &o) const
   {
@@ -2273,17 +1910,17 @@ struct EventUsage
 :type: ResourceUsage
 )");
   ResourceUsage usage;
+
+  DOCUMENT(R"(An optional :class:`ResourceId` identifying the view through which the use happened.
+
+:type: ResourceId
+)");
+  ResourceId view;
 };
 
 DECLARE_REFLECTION_STRUCT(EventUsage);
 
-DOCUMENT(R"(
-Subresource()
-Subresource(other: Subresource)
-Subresource(mip: int = 0, slice: int = 0, sample: int = 0)
-
-Specifies a subresource within a texture.
-)");
+DOCUMENT("Specifies a subresource within a texture.");
 struct Subresource
 {
   DOCUMENT("");
@@ -2336,11 +1973,7 @@ texture may not allow referring to a single depth slice - see where the Subresou
 
 DECLARE_REFLECTION_STRUCT(Subresource);
 
-DOCUMENT(R"(
-ActionDescription()
-ActionDescription(other: ActionDescription)
-
-Describes the properties of an action.
+DOCUMENT(R"(Describes the properties of an action.
 
 An action is a call such as a draw, a compute dispatch, clears, copies, resolves, etc. Any GPU event
 which may have deliberate visible side-effects to application-visible memory, typically resources
@@ -2526,21 +2159,21 @@ operation.
 
   DOCUMENT(R"(The parent of this action, or ``None`` if there is no parent for this action.
 
-:type: Optional[ActionDescription]
+:type: ActionDescription
 )");
   const ActionDescription *parent = NULL;
 
   DOCUMENT(R"(The previous action in the frame, or ``None`` if this is the first action in the
 frame.
 
-:type: Optional[ActionDescription]
+:type: ActionDescription
 )");
-  const ActionDescription *previousAction = NULL;
+  const ActionDescription *previous = NULL;
   DOCUMENT(R"(The next action in the frame, or ``None`` if this is the last action in the frame.
 
-:type: Optional[ActionDescription]
+:type: ActionDescription
 )");
-  const ActionDescription *nextAction = NULL;
+  const ActionDescription *next = NULL;
 
   DOCUMENT(R"(An 8-tuple of the :class:`ResourceId` ids for the color outputs, which can be used
 for very coarse bucketing of actions into similar passes by their outputs.
@@ -2569,12 +2202,7 @@ for very coarse bucketing of actions into similar passes by their outputs.
 
 DECLARE_REFLECTION_STRUCT(ActionDescription);
 
-DOCUMENT(R"(
-APIProperties()
-APIProperties(other: APIProperties)
-
-Gives some API-specific information about the capture.
-)");
+DOCUMENT("Gives some API-specific information about the capture.");
 struct APIProperties
 {
   DOCUMENT("");
@@ -2645,12 +2273,7 @@ with software rendering, or with some functionality disabled due to lack of supp
 
 DECLARE_REFLECTION_STRUCT(APIProperties);
 
-DOCUMENT(R"(
-DriverInformation()
-DriverInformation(other: DriverInformation)
-
-Gives information about the driver for this API.
-)");
+DOCUMENT("Gives information about the driver for this API.");
 struct DriverInformation
 {
   DOCUMENT("");
@@ -2673,13 +2296,7 @@ struct DriverInformation
 
 DECLARE_REFLECTION_STRUCT(DriverInformation);
 
-DOCUMENT(R"(
-Uuid()
-Uuid(other: Uuid)
-Uuid(word1: int, word2: int, word3: int, word4: int)
-
-A 128-bit UUID.
-)");
+DOCUMENT("A 128-bit Uuid.");
 struct Uuid
 {
   DOCUMENT("");
@@ -2699,7 +2316,7 @@ struct Uuid
   bool operator<(const Uuid &rhs) const { return words < rhs.words; }
   DOCUMENT("Compares two ``Uuid`` objects for equality.");
   bool operator==(const Uuid &rhs) const { return words == rhs.words; }
-  DOCUMENT(R"(The UUID bytes as a tuple of four 32-bit integers.
+  DOCUMENT(R"(The Uuid bytes as a tuple of four 32-bit integers.
 
 :type: Tuple[int,int,int,int]
 )")
@@ -2708,12 +2325,7 @@ struct Uuid
 
 DECLARE_REFLECTION_STRUCT(Uuid);
 
-DOCUMENT(R"(
-CounterDescription()
-CounterDescription(other: CounterDescription)
-
-Describes a GPU counter's purpose and result value.
-)");
+DOCUMENT("Describes a GPU counter's purpose and result value.");
 struct CounterDescription
 {
   DOCUMENT("");
@@ -2781,11 +2393,7 @@ struct CounterDescription
 
 DECLARE_REFLECTION_STRUCT(CounterDescription);
 
-DOCUMENT(R"(
-CounterValue()
-CounterValue(other: CounterValue)
-
-A resulting value from a GPU counter. Only one member is valid, see
+DOCUMENT(R"(A resulting value from a GPU counter. Only one member is valid, see
 :class:`CounterDescription`.
 )");
 union CounterValue
@@ -2814,14 +2422,7 @@ union CounterValue
 
 DECLARE_REFLECTION_STRUCT(CounterValue);
 
-DOCUMENT(R"(
-CounterResult()
-CounterResult(other: CounterResult)
-CounterResult(eventId: int, counter: GPUCounter, data: float)
-CounterResult(eventId: int, counter: GPUCounter, data: int)
-
-The resulting value from a counter at an event.
-)");
+DOCUMENT("The resulting value from a counter at an event.");
 struct CounterResult
 {
 #if defined(SWIG) || defined(SWIGPYTHON)
@@ -2908,12 +2509,7 @@ struct CounterResult
 
 DECLARE_REFLECTION_STRUCT(CounterResult);
 
-DOCUMENT(R"(
-PixelValue()
-PixelValue(other: CounterValue)
-
-The contents of an RGBA pixel.
-)");
+DOCUMENT("The contents of an RGBA pixel.");
 union PixelValue
 {
   DOCUMENT(R"(The RGBA value interpreted as ``float``.
@@ -2935,12 +2531,7 @@ union PixelValue
 
 DECLARE_REFLECTION_STRUCT(PixelValue);
 
-DOCUMENT(R"(
-ModificationValue()
-ModificationValue(other: ModificationValue)
-
-The value of pixel output at a particular event.
-)");
+DOCUMENT("The value of pixel output at a particular event.");
 struct ModificationValue
 {
   DOCUMENT("");
@@ -2964,7 +2555,7 @@ struct ModificationValue
   }
   DOCUMENT(R"(The color value.
 
-If the modifications are for a color target, the contents will all be ``0``.
+If the modifications are for a color target, tthe contents will all be ``0``.
 
 :type: PixelValue
 )");
@@ -3004,12 +2595,7 @@ will be ``-2``. This will only happen when looking at multiple modifications fro
 
 DECLARE_REFLECTION_STRUCT(ModificationValue);
 
-DOCUMENT(R"(
-PixelModification()
-PixelModification(other: PixelModification)
-
-An attempt to modify a pixel by a particular event.
-)");
+DOCUMENT("An attempt to modify a pixel by a particular event.");
 struct PixelModification
 {
   DOCUMENT("");
@@ -3185,7 +2771,7 @@ pixel.
   }
 
   DOCUMENT(R"(Update the depth-test failure state based on known shader output depth value and
-:data:`preMod` reference value, quantised to a certain number of depth bits with epsilon.
+preMod reference value, quantised to a certain number of depth bits with epsilon.
 
 This is primarily used internally and should not be needed to be called externally.
 
@@ -3201,12 +2787,12 @@ This is primarily used internally and should not be needed to be called external
     if(depthBits == 24)
     {
       shadDepth = float(uint32_t(float(shadDepth * 0xffffff))) / float(0xffffff);
-      eps = float(1.5f) / float(0xffffff);
+      eps = float(1.0f) / float(0xffffff);
     }
     else if(depthBits == 16)
     {
       shadDepth = float(uint32_t(float(shadDepth * 0xffff))) / float(0xffff);
-      eps = float(1.5f) / float(0xffff);
+      eps = float(1.0f) / float(0xffff);
     }
 
     bool passed = true;
@@ -3232,12 +2818,7 @@ This is primarily used internally and should not be needed to be called external
 
 DECLARE_REFLECTION_STRUCT(PixelModification);
 
-DOCUMENT(R"(
-Thumbnail()
-Thumbnail(other: Thumbnail)
-
-Contains the bytes and metadata describing a thumbnail.
-)");
+DOCUMENT("Contains the bytes and metadata describing a thumbnail.");
 struct Thumbnail
 {
   DOCUMENT("");
@@ -3272,13 +2853,9 @@ struct Thumbnail
 
 DECLARE_REFLECTION_STRUCT(Thumbnail);
 
-DOCUMENT(R"(
-DebugPixelInputs()
-DebugPixelInputs(other: DebugPixelInputs)
-
-Contains the properties used to select which fragment to debug, used as an input
-to :meth:`ReplayController.DebugPixel`.
-)");
+DOCUMENT(
+    "Contains the properties used to select which fragment to debug, used as an input to "
+    "DebugPixel.");
 struct DebugPixelInputs
 {
   DOCUMENT("");

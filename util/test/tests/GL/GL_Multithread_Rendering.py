@@ -1,3 +1,4 @@
+import renderdoc as rd
 import rdtest
 
 
@@ -7,14 +8,14 @@ class GL_Multithread_Rendering(rdtest.TestCase):
     def check_capture(self):
         action = self.get_last_action()
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         self.check_pixel_value(pipe.GetOutputTargets()[0].resource, 0.25, 0.0, [0.0, 0.0, 0.0, 0.0])
         self.check_pixel_value(pipe.GetOutputTargets()[0].resource, 0.75, 0.0, [0.0, 0.0, 0.0, 0.0])
 
-        tex_details = self.get_texture(pipe.GetOutputTargets()[0].resource)
+        tex_details: rd.TextureDescription = self.get_texture(pipe.GetOutputTargets()[0].resource)
 
         w = int(tex_details.width / 40)
         h = int(tex_details.height / 40)

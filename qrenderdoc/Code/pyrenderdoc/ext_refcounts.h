@@ -87,10 +87,5 @@ fail:
 template <>
 inline SDFile *MakeFromArgsTuple<SDFile>(PyObject *args)
 {
-  if(!SWIG_Python_UnpackTuple(args, "new_SDFile", 0, 0, 0))
-    SWIG_fail;
-
   return new SDFile();
-fail:
-  return NULL;
 }

@@ -8,20 +8,21 @@ class VK_CBuffer_Zoo(rdtest.TestCase):
     def check_capture(self):
         action = self.find_action("Draw")
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        props: rd.APIProperties = self.controller.GetAPIProperties()
+
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         stage = rd.ShaderStage.Pixel
 
         # Verify that the GLSL action is first
-        refl = pipe.GetShaderReflection(stage)
-        assert refl is not None
-        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), refl, '')
+        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), pipe.GetShaderReflection(stage),
+                                                   '')
 
-        assert 'GLSL' in disasm
+        self.check('GLSL' in disasm)
 
         cbuf = pipe.GetConstantBlock(stage, 0, 0).descriptor
 
@@ -77,20 +78,19 @@ class VK_CBuffer_Zoo(rdtest.TestCase):
         rdtest.log.success("Specialization constants are as expected")
 
         # Move to the HLSL action
-        action = action.nextAction
+        action = action.next
 
-        assert action is not None
+        self.check(action is not None)
 
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
-        pipe = self.controller.GetPipelineState()
+        pipe: rd.PipeState = self.controller.GetPipelineState()
 
         # Verify that this is the HLSL action
-        refl = pipe.GetShaderReflection(stage)
-        assert refl is not None
-        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), refl, '')
+        disasm = self.controller.DisassembleShader(pipe.GetGraphicsPipelineObject(), pipe.GetShaderReflection(stage),
+                                                   '')
 
-        assert 'HLSL' in disasm
+        self.check('HLSL' in disasm)
 
         cbuf = pipe.GetConstantBlock(stage, 0, 0).descriptor
 
@@ -120,7 +120,7 @@ class VK_CBuffer_Zoo(rdtest.TestCase):
 
         rdtest.log.success("HLSL picked value is as expected")
 
-    def check_inline_cbuffer(self, inline_check: rdtest.ConstantBufferChecker):
+    def check_inline_cbuffer(self, inline_check):
         # float4 zero;
         inline_check.check('inline_zero').rows(1).cols(4).value([0.0, 0.0, 0.0, 0.0])
 
@@ -141,7 +141,7 @@ class VK_CBuffer_Zoo(rdtest.TestCase):
 
         inline_check.done()
 
-    def check_glsl_cbuffer(self, var_check: rdtest.ConstantBufferChecker):
+    def check_glsl_cbuffer(self, var_check):
         # For more detailed reference for the below checks, see the commented definition of the cbuffer
         # in the shader source code in the demo itself
 
@@ -479,7 +479,7 @@ class VK_CBuffer_Zoo(rdtest.TestCase):
 
         var_check.done()
 
-    def check_hlsl_cbuffer(self, var_check: rdtest.ConstantBufferChecker):
+    def check_hlsl_cbuffer(self, var_check):
         # For more detailed reference for the below checks, see the commented definition of the cbuffer
         # in the shader source code in the demo itself
 

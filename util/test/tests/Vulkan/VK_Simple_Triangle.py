@@ -6,9 +6,9 @@ class VK_Simple_Triangle(rdtest.TestCase):
     demos_test_name = 'VK_Simple_Triangle'
 
     def check_capture(self):
-        last_action = self.get_last_action()
+        last_action: rd.ActionDescription = self.get_last_action()
 
-        self.set_event(last_action.eventId, True)
+        self.controller.SetFrameEvent(last_action.eventId, True)
 
         self.check_triangle(out=last_action.copyDestination)
 
@@ -16,13 +16,11 @@ class VK_Simple_Triangle(rdtest.TestCase):
 
         action = self.find_action("Draw")
 
-        assert action is not None
-
-        self.set_event(action.eventId, False)
+        self.controller.SetFrameEvent(action.eventId, False)
 
         postvs_data = self.get_postvs(action, rd.MeshDataStage.VSOut, 0, action.numIndices)
 
-        postvs_ref: rdtest.MeshReference = {
+        postvs_ref = {
             0: {
                 'vtx': 0,
                 'idx': 0,
@@ -57,6 +55,8 @@ class VK_Simple_Triangle(rdtest.TestCase):
 
         # Check that nothing breaks if we call typical enumeration functions on resources
         for res in self.controller.GetResources():
+            res: rd.ResourceDescription
+
             save_data.resourceId = res.resourceId
 
             self.controller.GetShaderEntryPoints(res.resourceId)

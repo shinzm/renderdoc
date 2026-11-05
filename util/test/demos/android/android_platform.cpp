@@ -76,8 +76,3 @@ std::string GetExecutableName()
 {
   return "__undefined__";
 }
-
-uint32_t GetPID()
-{
-  return (uint32_t)getpid();
-}
